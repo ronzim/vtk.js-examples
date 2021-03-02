@@ -1,19 +1,20 @@
-import vtkGenericRenderWindow from 'vtk.js/Sources/Rendering/Misc/GenericRenderWindow';
+import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
 
-import vtkHttpDataSetReader from 'vtk.js/Sources/IO/Core/HttpDataSetReader';
-import vtkColorTransferFunction from 'vtk.js/Sources/Rendering/Core/ColorTransferFunction';
-import vtkPiecewiseFunction from 'vtk.js/Sources/Common/DataModel/PiecewiseFunction';
-import vtkImageMapper from 'vtk.js/Sources/Rendering/Core/ImageMapper';
-import vtkImageSlice from 'vtk.js/Sources/Rendering/Core/ImageSlice';
-import vtkInteractorStyleImage from 'vtk.js/Sources/Interaction/Style/InteractorStyleImage';
-import ImageConstants from 'vtk.js/Sources/Rendering/Core/ImageMapper/Constants';
+import vtkHttpDataSetReader from "vtk.js/Sources/IO/Core/HttpDataSetReader";
+import vtkColorTransferFunction from "vtk.js/Sources/Rendering/Core/ColorTransferFunction";
+import vtkPiecewiseFunction from "vtk.js/Sources/Common/DataModel/PiecewiseFunction";
+import vtkImageMapper from "vtk.js/Sources/Rendering/Core/ImageMapper";
+import vtkImageSlice from "vtk.js/Sources/Rendering/Core/ImageSlice";
+import vtkInteractorStyleImage from "vtk.js/Sources/Interaction/Style/InteractorStyleImage";
+import ImageConstants from "vtk.js/Sources/Rendering/Core/ImageMapper/Constants";
 
 const { SlicingMode } = ImageConstants;
 
-
 // --- Set up our renderer ---
 
-const container = document.querySelector('#container');
+// const container = document.querySelector("#container");
+const container = document.getElementById("viewer");
+console.log(container);
 
 // We use the wrapper here to abstract out manual RenderWindow/Renderer/OpenGLRenderWindow setup
 const genericRenderWindow = vtkGenericRenderWindow.newInstance();
@@ -26,13 +27,11 @@ const renderWindow = genericRenderWindow.getRenderWindow();
 // renderer camera to parallel projection
 renderer.getActiveCamera().setParallelProjection(true);
 
-
 // --- Set up interactor style for image slicing
 
 const istyle = vtkInteractorStyleImage.newInstance();
-istyle.setInteractionMode('IMAGE_SLICING');
+istyle.setInteractionMode("IMAGE_SLICING");
 renderWindow.getInteractor().setInteractorStyle(istyle);
-
 
 // --- Set up the slicing actor ---
 
@@ -45,24 +44,26 @@ mapper.setSlicingMode(SlicingMode.Z);
 // tell the actor which mapper to use
 actor.setMapper(mapper);
 
-
 // --- set up default window/level ---
 
 actor.getProperty().setColorWindow(255);
 actor.getProperty().setColorLevel(127);
-
 
 // --- load remote dataset ---
 
 const reader = vtkHttpDataSetReader.newInstance({ fetchGzip: true });
 
 // wire up the reader to the mapper
-mapper.setInputConnection(reader.getOutputPort());
+// mapper.setInputConnection(reader.getOutputPort());
 
 reader
-  .setUrl('https://kitware.github.io/vtk-js/data/volume/LIDC2.vti')
+  .setUrl("https://kitware.github.io/vtk-js/data/volume/LIDC2.vti")
   .then(() => reader.loadData())
   .then(() => {
+    let volume = reader.getOutputData();
+    console.log(volume);
+    mapper.setInputData(volume);
+
     // --- Add volume actor to scene ---
     renderer.addActor(actor);
 
@@ -71,6 +72,7 @@ reader
     renderWindow.render();
   });
 
+console.log(reader);
 
 // --- Expose globals so we can play with values in the dev console ---
 
@@ -78,4 +80,3 @@ global.renderWindow = renderWindow;
 global.renderer = renderer;
 global.actor = actor;
 global.mapper = mapper;
-
