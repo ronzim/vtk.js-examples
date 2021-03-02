@@ -1,8 +1,3 @@
-# VTK.js examples
-
-This repository contains VTK.js examples used in the VTK.js+OHIF tutorials. A
-link will be provided to the final slides (to be inserted).
- 
 ## Examples overview
 
 There are a few examples in this repo. They are listed below:
@@ -15,6 +10,7 @@ There are a few examples in this repo. They are listed below:
 - `src/volume-transfer.js`: Example that demonstrates basic volume rendering with transfer functions.
 - `src/image-slicing.js`: Example that demonstrates volume slicing and interaction.
 - `src/widgets.js`: Example that demonstrates a volume cropping widget.
+- `src/cornerstone.js`: Example that demonstrates image parsing with cornerstone and how to load the volume in vtkjs.
 
 ## Building the examples
 
@@ -32,6 +28,7 @@ Once you've run that, you can now run one of the example projects:
 - `npm run dev:volume-transfer`
 - `npm run dev:image-slicing`
 - `npm run dev:widgets`
+- `npm run dev:cornerstone`
 
 Running the above commands will use the webpack-dev-server, which will watch
 the transpiled files and reload the page whenever changes occur. Once run, you can see
