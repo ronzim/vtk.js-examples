@@ -13,13 +13,14 @@
     "dev:image-slicing": "EXAMPLE=image-slicing.js webpack-dev-server --mode=development",
     "dev:widgets": "EXAMPLE=widgets.js webpack-dev-server --mode=development",
     "dev:cornerstone": "EXAMPLE=cornerstone.js webpack-dev-server --mode=development",
-    "dev:mpr": "EXAMPLE=mpr.js webpack-dev-server --mode=development"
+    "dev:mpr": "EXAMPLE=mpr.js webpack-dev-server --mode=development",
+    "dev:mpr2": "EXAMPLE=mpr2.js webpack-dev-server --mode=development"
   },
   "author": "",
   "license": "BSD-3-Clause",
   "dependencies": {
     "lodash": "^4.17.21",
-    "vtk.js": "^11.1.3"
+    "vtk.js": "^16.13.0"
   },
   "devDependencies": {
     "kw-web-suite": "^8.0.0"
