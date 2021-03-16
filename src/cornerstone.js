@@ -1,6 +1,4 @@
 import * as _ from "lodash";
-import vtkDataArray from "vtk.js/Sources/Common/Core/DataArray";
-import vtkImageData from "vtk.js/Sources/Common/DataModel/ImageData";
 import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
 import vtkImageMapper from "vtk.js/Sources/Rendering/Core/ImageMapper";
 import vtkImageSlice from "vtk.js/Sources/Rendering/Core/ImageSlice";
@@ -8,108 +6,29 @@ import vtkInteractorStyleImage from "vtk.js/Sources/Interaction/Style/Interactor
 import ImageConstants from "vtk.js/Sources/Rendering/Core/ImageMapper/Constants";
 const { SlicingMode } = ImageConstants;
 
-let demoFiles = [];
-let counter = 0;
-let demoFileList = getDemoFileNames();
+import { buildVtkVolume, fitToWindow, loadSerieWithLarvitar } from "./utils.js";
 
-function getDemoFileNames() {
-  let demoFileList = [];
-  for (let i = 1; i < 25; i++) {
-    let filename = "anon" + i;
-    demoFileList.push(filename);
-  }
-  return demoFileList;
-}
+// example main code ------------------------------
 
-async function createFile(fileName, cb) {
-  let response = await fetch("./demo/" + fileName);
-  let data = await response.blob();
-  let file = new File([data], fileName);
-  demoFiles.push(file);
-  counter++;
-  if (counter == demoFileList.length) {
-    cb();
-  }
-}
-
-// init all larvitar
-larvitar.initLarvitarStore();
-larvitar.initializeImageLoader();
-larvitar.initializeCSTools();
-larvitar.larvitar_store.addViewport("viewer");
-
-// load dicom and render
-_.each(demoFileList, function(demoFile) {
-  createFile(demoFile, () => {
-    renderSerieCornerstone(renderSerieVtk);
-  });
+loadSerieWithLarvitar(serie => {
+  renderSerieCornerstone(serie, renderSerieVtk);
 });
 
-function renderSerieCornerstone(cb) {
-  larvitar.resetImageParsing();
-  larvitar.readFiles(demoFiles, function(seriesStack, err) {
-    // render the first series of the study
-    let seriesId = _.keys(seriesStack)[0];
-    let serie = seriesStack[seriesId];
-    console.log(serie);
-    larvitar.renderImage(serie, "viewer");
-    larvitar.addDefaultTools();
-    larvitar.setToolActive(larvitar.larvitar_store.state.leftMouseHandler);
-    console.log(larvitar.larvitar_store);
-    if (cb) {
-      cb(serie);
-    }
-  });
+// -------------------------------------------------
+
+function renderSerieCornerstone(serie, cb) {
+  larvitar.renderImage(serie, "viewer");
+  larvitar.addDefaultTools();
+  larvitar.setToolActive(larvitar.larvitar_store.state.leftMouseHandler);
+
+  if (cb) {
+    cb(serie);
+  }
 }
 
 function renderSerieVtk(serie) {
-  console.log(larvitar.cornerstone.imageCache.cachedImages);
-  setTimeout(() => {
-    let header = larvitar.buildHeader(serie);
-    // TODO load and cache
-    let data = larvitar.buildData(serie, false);
-    let volume = buildVtkVolume(header, data);
-    console.log(volume);
-    setupVtkScene(volume);
-  }, 1000);
-}
-
-function buildVtkVolume(header, data) {
-  console.log(header, data);
-  const dims = [
-    header.volume.cols,
-    header.volume.rows,
-    header.volume.imageIds.length
-  ];
-  const numScalars = dims[0] * dims[1] * dims[2];
-
-  if (numScalars < 1 || dims[1] < 2 || dims[1] < 2 || dims[2] < 2) {
-    return;
-  }
-
-  const volume = vtkImageData.newInstance();
-  const origin = header.volume.imagePosition;
-  const spacing = header.volume.pixelSpacing.concat(
-    header.volume.sliceThickness // TODO check
-  );
-
-  console.log(origin, spacing, numScalars);
-
-  volume.setDimensions(dims);
-  volume.setOrigin(origin);
-  volume.setSpacing(spacing);
-
-  const scalars = vtkDataArray.newInstance({
-    name: "Scalars",
-    values: data,
-    numberOfComponents: 1
-  });
-
-  volume.getPointData().setScalars(scalars);
-
-  volume.modified();
-
-  return volume;
+  let volume = buildVtkVolume(serie);
+  setupVtkScene(volume);
 }
 
 function setupVtkScene(volume) {
@@ -181,43 +100,4 @@ function setupVtkScene(volume) {
   window.actor = actor;
   window.mapper = mapper;
   window.genericRenderWindow = genericRenderWindow;
-}
-
-// fit to window
-function fitToWindow(genericRenderWindow, dir) {
-  const bounds = genericRenderWindow.getRenderer().computeVisiblePropBounds();
-  const dim = [
-    (bounds[1] - bounds[0]) / 2,
-    (bounds[3] - bounds[2]) / 2,
-    (bounds[5] - bounds[4]) / 2
-  ];
-  const w = genericRenderWindow.getContainer().clientWidth;
-  const h = genericRenderWindow.getContainer().clientHeight;
-  const r = w / h;
-
-  let x;
-  let y;
-  if (dir === "x") {
-    x = dim[1];
-    y = dim[2];
-  } else if (dir === "y") {
-    x = dim[0];
-    y = dim[2];
-  } else if (dir === "z") {
-    x = dim[0];
-    y = dim[1];
-  }
-  if (r >= x / y) {
-    // use width
-    genericRenderWindow
-      .getRenderer()
-      .getActiveCamera()
-      .setParallelScale(y + 1);
-  } else {
-    // use height
-    genericRenderWindow
-      .getRenderer()
-      .getActiveCamera()
-      .setParallelScale(x / r + 1);
-  }
 }

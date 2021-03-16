@@ -12,7 +12,8 @@
     "dev:volume-transfer": "EXAMPLE=volume-transfer.js webpack-dev-server --mode=development",
     "dev:image-slicing": "EXAMPLE=image-slicing.js webpack-dev-server --mode=development",
     "dev:widgets": "EXAMPLE=widgets.js webpack-dev-server --mode=development",
-    "dev:cornerstone": "EXAMPLE=cornerstone.js webpack-dev-server --mode=development"
+    "dev:cornerstone": "EXAMPLE=cornerstone.js webpack-dev-server --mode=development",
+    "dev:mpr": "EXAMPLE=mpr.js webpack-dev-server --mode=development"
   },
   "author": "",
   "license": "BSD-3-Clause",
