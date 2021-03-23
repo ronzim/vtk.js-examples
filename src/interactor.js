@@ -224,6 +224,8 @@ function vtkInteractorStyleImage(publicAPI, model) {
       return;
     }
 
+    console.log(model);
+
     const renderer = model.interactor.getCurrentRenderer();
     if (!renderer) {
       return;
@@ -234,7 +236,7 @@ function vtkInteractorStyleImage(publicAPI, model) {
       console.log(j, prop, targetIndex);
       if (
         prop.isA("vtkImageSlice") &&
-        // j === targetIndex &&
+        j === targetIndex &&
         prop.getPickable()
       ) {
         return true;

@@ -7,8 +7,8 @@ import vtkImageData from "vtk.js/Sources/Common/DataModel/ImageData";
 import vtkImageMapper from "vtk.js/Sources/Rendering/Core/ImageMapper";
 import vtkImageReslice from "vtk.js/Sources/Imaging/Core/ImageReslice";
 import vtkImageSlice from "vtk.js/Sources/Rendering/Core/ImageSlice";
-// import vtkInteractorStyleImage from "vtk.js/Sources/Interaction/Style/InteractorStyleImage";
-import vtkInteractorStyleImage from "./interactor";
+import vtkInteractorStyleImage from "vtk.js/Sources/Interaction/Style/InteractorStyleImage";
+// import vtkInteractorStyleImage from "./interactor";
 import vtkInteractorStyleTrackballCamera from "vtk.js/Sources/Interaction/Style/InteractorStyleTrackballCamera";
 import vtkMapper from "vtk.js/Sources/Rendering/Core/Mapper";
 import vtkOutlineFilter from "vtk.js/Sources/Filters/General/OutlineFilter";
@@ -195,8 +195,9 @@ function mpr(image, viewports) {
 
     if (i < 3) {
       const iStyle = vtkInteractorStyleImage.newInstance();
-      iStyle.setInteractionMode("IMAGE_2D");
       obj.interactor.setInteractorStyle(iStyle);
+      iStyle.setInteractionMode("IMAGE_2D");
+      iStyle.setCurrentImageNumber(0); // must be set after interactor.setInteractorStyle
       obj.widgetInstance = obj.widgetManager.addWidget(
         widget,
         xyzToViewType[i]
@@ -354,6 +355,7 @@ function mpr(image, viewports) {
       interactionContext.computeFocalPointOffset
     );
     view3D.renderWindow.render();
+
     return obj.modified;
   }
 
