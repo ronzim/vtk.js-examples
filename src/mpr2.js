@@ -18,6 +18,7 @@ import vtkRenderer from "vtk.js/Sources/Rendering/Core/Renderer";
 import vtkRenderWindow from "vtk.js/Sources/Rendering/Core/RenderWindow";
 import vtkRenderWindowInteractor from "vtk.js/Sources/Rendering/Core/RenderWindowInteractor";
 import vtkResliceCursorWidget from "vtk.js/Sources/Widgets/Widgets3D/ResliceCursorWidget";
+import vtkDistanceWidget from "vtk.js/Sources/Widgets/Widgets3D/DistanceWidget";
 import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
 import vtkColorTransferFunction from "vtk.js/Sources/Rendering/Core/ColorTransferFunction";
 import vtkPiecewiseFunction from "vtk.js/Sources/Common/DataModel/PiecewiseFunction";
@@ -29,147 +30,44 @@ import { vec3 } from "gl-matrix";
 import { SlabMode } from "vtk.js/Sources/Imaging/Core/ImageReslice/Constants";
 
 import { xyzToViewType } from "vtk.js/Sources/Widgets/Widgets3D/ResliceCursorWidget/Constants";
-// import controlPanel from "./controlPanel.html";
 
-import { buildVtkVolume, loadSerieWithLarvitar } from "./utils";
+import {
+  buildVtkVolume,
+  loadSerieWithLarvitar,
+  createRGBStringFromRGBValues
+} from "./utils";
 
-const controlPanel = `<table> 
-<tr>
-  <td>Keep orthogonality :</td>
-  <td>
-    <input type="checkbox" id="checkboxOrthogality" checked>
-  </td>
-</tr>
-<tr>
-  <td>Allow rotation :</td>
-  <td>
-    <input type="checkbox" id="checkboxRotation" checked>
-  </td>
-</tr>
-<tr>
-  <td>Allow translation :</td>
-  <td>
-    <input type="checkbox" id="checkboxTranslation" checked>
-  </td>
-</tr>
-<tr>
-  <td>Slab Mode :</td>
-  <td>
-    <select id="slabMode">
-      <option id="slabModeMin">MIN</option>
-      <option id="slabModeMax">MAX</option>
-      <option id="slabModeMean" selected="selected">MEAN</option>
-      <option id="slabModeSum">SUM</option>
-    </select>
-  </td>
-</tr>
-<tr>
-  <td>Slab Number of Slices :</td>
-  <td><input id='slabNumber' type="range" min="1" max="100" step="1" value="1" style="width: 100px;"/></td>
-  <td id='slabNumberValue'>1</td>
-</tr>
-<tr>
-  <td>
-    <button id="buttonReset">Reset views:</button>
-  </td>
-</tr>  
-</table>`;
+import { controlPanel } from "./controlPanel";
 
-// ----------------------------------------------------------------------------
-// Define html structure
-// ----------------------------------------------------------------------------
+// GLOBAL APP STATE
 
-const container = document.querySelector("body");
-const table = document.createElement("table");
-table.setAttribute("id", "table");
-container.appendChild(table);
+const viewColors = [
+  [48 / 255, 0, 179 / 255], // sagittal
+  [0, 179 / 255, 48 / 255], // coronal
+  [179 / 255, 48 / 255, 0], // axial
+  [0.5, 0.5, 0.5] // 3D
+];
 
-// Define first line that will contains control panel
-const trLine0 = document.createElement("tr");
-trLine0.setAttribute("id", "line0");
-table.appendChild(trLine0);
-const controlContainer = document.createElement("div");
-trLine0.appendChild(controlContainer);
-controlContainer.innerHTML = controlPanel;
+const showDebugActors = false;
 
-const trLine1 = document.createElement("tr");
-trLine1.setAttribute("id", "line1");
-table.appendChild(trLine1);
-
-const trLine2 = document.createElement("tr");
-trLine2.setAttribute("id", "line2");
-table.appendChild(trLine2);
-
-// ----------------------------------------------------------------------------
-// Setup rendering code
-// ----------------------------------------------------------------------------
-
-/**
- * Function to create synthetic image data with correct dimensions
- * Can be use for debug
- * @param {Array[Int]} dims
- */
-// eslint-disable-next-line no-unused-vars
-function createSyntheticImageData(dims) {
-  const imageData = vtkImageData.newInstance();
-  const newArray = new Uint8Array(dims[0] * dims[1] * dims[2]);
-  const s = 0.1;
-  imageData.setSpacing(s, s, s);
-  imageData.setExtent(0, 127, 0, 127, 0, 127);
-  let i = 0;
-  for (let z = 0; z < dims[2]; z++) {
-    for (let y = 0; y < dims[1]; y++) {
-      for (let x = 0; x < dims[0]; x++) {
-        newArray[i++] = (256 * (i % (dims[0] * dims[1]))) / (dims[0] * dims[1]);
-      }
-    }
-  }
-
-  const da = vtkDataArray.newInstance({
-    numberOfComponents: 1,
-    values: newArray
-  });
-  da.setName("scalars");
-
-  imageData.getPointData().setScalars(da);
-
-  return imageData;
-}
-
-function createRGBStringFromRGBValues(rgb) {
-  if (rgb.length !== 3) {
-    return "rgb(0, 0, 0)";
-  }
-  return `rgb(${(rgb[0] * 255).toString()}, ${(rgb[1] * 255).toString()}, ${(
-    rgb[2] * 255
-  ).toString()})`;
-}
+const viewAttributes = [];
+let RCwidget = null;
+let view3D = null;
 
 function mpr(image, viewports) {
-  // ----------------------------------------------------------------------------
-  // Define main attributes
-  // ----------------------------------------------------------------------------
+  console.log(" --- MPR --- ");
 
-  const viewColors = [
-    [48 / 255, 0, 179 / 255], // sagittal
-    [0, 179 / 255, 48 / 255], // coronal
-    [179 / 255, 48 / 255, 0], // axial
-    [0.5, 0.5, 0.5] // 3D
-  ];
+  // INIT reslice widget
 
-  const viewAttributes = [];
-  const widget = vtkResliceCursorWidget.newInstance();
-  const widgetState = widget.getWidgetState();
+  RCwidget = vtkResliceCursorWidget.newInstance();
+  const widgetState = RCwidget.getWidgetState();
   widgetState.setKeepOrthogonality(true);
   widgetState.setOpacity(0.6);
   widgetState.setSphereRadius(10);
   widgetState.setShowCenter(false);
-
-  const showDebugActors = false;
-
   const initialPlanesState = { ...widgetState.getPlanes() };
 
-  let view3D = null;
+  // INIT scenes
 
   for (let i = 0; i < 4; i++) {
     const element = document.getElementById(viewports[i]);
@@ -194,22 +92,27 @@ function mpr(image, viewports) {
     obj.widgetManager.setRenderer(obj.renderer);
 
     if (i < 3) {
+      // SETUP interactor style 2D (wwwl)
       const iStyle = vtkInteractorStyleImage.newInstance();
       obj.interactor.setInteractorStyle(iStyle);
       iStyle.setInteractionMode("IMAGE_2D");
       iStyle.setCurrentImageNumber(0); // must be set after interactor.setInteractorStyle
       obj.widgetInstance = obj.widgetManager.addWidget(
-        widget,
+        RCwidget,
         xyzToViewType[i]
       );
+
       obj.widgetManager.enablePicking();
       // Use to update all renderers buffer when actors are moved
       obj.widgetManager.setCaptureOn(CaptureOn.MOUSE_MOVE);
     } else {
+      // SETUP interactor style 3D (trackball)
       obj.interactor.setInteractorStyle(
         vtkInteractorStyleTrackballCamera.newInstance()
       );
     }
+
+    // SETUP color and opacity transfer functions
 
     const rgb = vtkColorTransferFunction.newInstance();
     rgb.addRGBPoint(0, 0, 0, 0);
@@ -220,6 +123,8 @@ function mpr(image, viewports) {
     ofun.addPoint(150, 1);
     ofun.addPoint(180, 1);
     ofun.addPoint(2046, 1);
+
+    // reslice actor and mapper
 
     obj.reslice = vtkImageReslice.newInstance();
     obj.reslice.setSlabMode(SlabMode.MEAN);
@@ -235,23 +140,14 @@ function mpr(image, viewports) {
     // obj.resliceActor.getProperty().setRGBTransferFunction(rgb);
     // obj.resliceActor.getProperty().setPiecewiseFunction(ofun);
     obj.resliceActor.setMapper(obj.resliceMapper);
-    obj.sphereActors = [];
-    obj.sphereSources = [];
 
-    // Create sphere for each 2D views which will be displayed in 3D
-    // Define origin, point1 and point2 of the plane used to reslice the volume
-    for (let j = 0; j < 3; j++) {
-      const sphere = vtkSphereSource.newInstance();
-      sphere.setRadius(5);
-      const mapper = vtkMapper.newInstance();
-      mapper.setInputConnection(sphere.getOutputPort());
-      const actor = vtkActor.newInstance();
-      actor.setMapper(mapper);
-      actor.getProperty().setColor(...viewColors[i]);
-      actor.setVisibility(showDebugActors);
-      obj.sphereActors.push(actor);
-      obj.sphereSources.push(sphere);
+    if (i < 3) {
+      obj.reslice.setInputData(image);
+      obj.renderer.addActor(obj.resliceActor);
     }
+
+    // add spheres for debug
+    addDebugSpheres(obj, viewColors[i], showDebugActors);
 
     if (i < 3) {
       viewAttributes.push(obj);
@@ -259,53 +155,12 @@ function mpr(image, viewports) {
       view3D = obj;
     }
 
-    // create axes
-    const axes = vtkAnnotatedCubeActor.newInstance();
-    axes.setDefaultStyle({
-      text: "+X",
-      fontStyle: "bold",
-      fontFamily: "Arial",
-      fontColor: "black",
-      fontSizeScale: res => res / 2,
-      faceColor: createRGBStringFromRGBValues(viewColors[0]),
-      faceRotation: 0,
-      edgeThickness: 0.1,
-      edgeColor: "black",
-      resolution: 400
-    });
-    // axes.setXPlusFaceProperty({ text: '+X' });
-    axes.setXPlusFaceProperty({
-      text: "+X",
-      faceColor: createRGBStringFromRGBValues(viewColors[0]),
-      faceRotation: 90
-    });
-    axes.setXMinusFaceProperty({
-      text: "-X",
-      faceColor: createRGBStringFromRGBValues(viewColors[0]),
-      faceRotation: 90,
-      fontStyle: "italic"
-    });
-    axes.setYPlusFaceProperty({
-      text: "+Y",
-      faceColor: createRGBStringFromRGBValues(viewColors[1]),
-      fontSizeScale: res => res / 4
-    });
-    axes.setYMinusFaceProperty({
-      text: "-Y",
-      faceColor: createRGBStringFromRGBValues(viewColors[1]),
-      fontColor: "black"
-    });
-    axes.setZPlusFaceProperty({
-      text: "+Z",
-      faceColor: createRGBStringFromRGBValues(viewColors[2])
-    });
-    axes.setZMinusFaceProperty({
-      text: "-Z",
-      faceColor: createRGBStringFromRGBValues(viewColors[2]),
-      faceRotation: 180
-    });
+    console.log("viewAttributes", viewAttributes);
+    console.log("view3D", view3D);
 
-    // create orientation widget
+    // SETUP orientation widget
+
+    let axes = createReferenceAxes(viewColors);
     const orientationWidget = vtkOrientationMarkerWidget.newInstance({
       actor: axes,
       interactor: obj.renderWindow.getInteractor()
@@ -319,112 +174,19 @@ function mpr(image, viewports) {
     orientationWidget.setMaxPixelSize(300);
   }
 
-  function updateReslice(
-    interactionContext = {
-      viewType: "",
-      reslice: null,
-      actor: null,
-      renderer: null,
-      resetFocalPoint: false, // Reset the focal point to the center of the display image
-      keepFocalPointPosition: false, // Defines if the focal point position is kepts (same display distance from reslice cursor center)
-      computeFocalPointOffset: false, // Defines if the display offset between reslice center and focal point has to be
-      // computed. If so, then this offset will be used to keep the focal point position during rotation.
-      spheres: null
-    }
-  ) {
-    const obj = widget.updateReslicePlane(
-      interactionContext.reslice,
-      interactionContext.viewType
-    );
+  // END for cycle --- scenes initialized
 
-    if (obj.modified) {
-      // Get returned modified from setter to know if we have to render
-      interactionContext.actor.setUserMatrix(
-        interactionContext.reslice.getResliceAxes()
-      );
-      interactionContext.sphereSources[0].setCenter(...obj.origin);
-      interactionContext.sphereSources[1].setCenter(...obj.point1);
-      interactionContext.sphereSources[2].setCenter(...obj.point2);
-    }
+  // add 2d slices to 3d
+  populate3dScene(viewAttributes, view3D);
 
-    widget.updateCameraPoints(
-      interactionContext.renderer,
-      interactionContext.viewType,
-      interactionContext.resetFocalPoint,
-      interactionContext.keepFocalPointPosition,
-      interactionContext.computeFocalPointOffset
-    );
-    view3D.renderWindow.render();
-
-    return obj.modified;
-  }
-
-  widget.setImage(image);
+  // set image in rc widget
+  RCwidget.setImage(image);
 
   // Create image outline in 3D view
-  const outline = vtkOutlineFilter.newInstance();
-  outline.setInputData(image);
-  const outlineMapper = vtkMapper.newInstance();
-  outlineMapper.setInputData(outline.getOutputData());
-  const outlineActor = vtkActor.newInstance();
-  outlineActor.setMapper(outlineMapper);
-  view3D.renderer.addActor(outlineActor);
+  create3dOutline(image, view3D);
 
-  viewAttributes.forEach((obj, i) => {
-    obj.reslice.setInputData(image);
-    obj.renderer.addActor(obj.resliceActor);
-    view3D.renderer.addActor(obj.resliceActor);
-    obj.sphereActors.forEach(actor => {
-      obj.renderer.addActor(actor);
-      view3D.renderer.addActor(actor);
-    });
-    const reslice = obj.reslice;
-    const viewType = xyzToViewType[i];
-
-    viewAttributes
-      // No need to update plane nor refresh when interaction
-      // is on current view. Plane can't be changed with interaction on current
-      // view. Refreshs happen automatically with `animation`.
-      // Note: Need to refresh also the current view because of adding the mouse wheel
-      // to change slicer
-      .forEach(v => {
-        // Interactions in other views may change current plane
-        v.widgetInstance.onInteractionEvent(
-          // computeFocalPointOffset: Boolean which defines if the offset between focal point and
-          // reslice cursor display center has to be recomputed (while translation is applied)
-          // canUpdateFocalPoint: Boolean which defines if the focal point can be updated because
-          // the current interaction is a rotation
-          ({ computeFocalPointOffset, canUpdateFocalPoint }) => {
-            console.log("interaction");
-            const activeViewType = widget.getWidgetState().getActiveViewType();
-            const keepFocalPointPosition =
-              activeViewType !== viewType && canUpdateFocalPoint;
-            updateReslice({
-              viewType,
-              reslice,
-              actor: obj.resliceActor,
-              renderer: obj.renderer,
-              resetFocalPoint: false,
-              keepFocalPointPosition,
-              computeFocalPointOffset,
-              sphereSources: obj.sphereSources
-            });
-          }
-        );
-      });
-
-    updateReslice({
-      viewType,
-      reslice,
-      actor: obj.resliceActor,
-      renderer: obj.renderer,
-      resetFocalPoint: true, // At first initilization, center the focal point to the image center
-      keepFocalPointPosition: false, // Don't update the focal point as we already set it to the center of the image
-      computeFocalPointOffset: true, // Allow to compute the current offset between display reslice center and display focal point
-      sphereSources: obj.sphereSources
-    });
-    obj.renderWindow.render();
-  });
+  // Bind scenes events to each widget
+  setupWidgetCallbacks(RCwidget, viewAttributes);
 
   view3D.renderer.resetCamera();
   view3D.renderer.resetCameraClippingRange();
@@ -509,8 +271,205 @@ function mpr(image, viewports) {
   });
 }
 
+// LOAD image and run mpr
+
 loadSerieWithLarvitar(serie => {
   const viewports = ["viewer-2", "viewer-3", "viewer-4", "viewer-5"];
   const image = buildVtkVolume(serie);
   mpr(image, viewports);
 });
+
+// --------------------------------------------
+// UTILS
+// --------------------------------------------
+
+function addDebugSpheres(obj, viewColor, show) {
+  obj.sphereActors = [];
+  obj.sphereSources = [];
+
+  // Create sphere for each 2D views which will be displayed in 3D
+  // Define origin, point1 and point2 of the plane used to reslice the volume
+  for (let j = 0; j < 3; j++) {
+    const sphere = vtkSphereSource.newInstance();
+    sphere.setRadius(5);
+    const mapper = vtkMapper.newInstance();
+    mapper.setInputConnection(sphere.getOutputPort());
+    const actor = vtkActor.newInstance();
+    actor.setMapper(mapper);
+    actor.getProperty().setColor(...viewColor);
+    actor.setVisibility(show);
+    obj.sphereActors.push(actor);
+    obj.sphereSources.push(sphere);
+  }
+}
+
+function createReferenceAxes(viewColors) {
+  const axes = vtkAnnotatedCubeActor.newInstance();
+  axes.setDefaultStyle({
+    text: "+X",
+    fontStyle: "bold",
+    fontFamily: "Arial",
+    fontColor: "black",
+    fontSizeScale: res => res / 2,
+    faceColor: createRGBStringFromRGBValues(viewColors[0]),
+    faceRotation: 0,
+    edgeThickness: 0.1,
+    edgeColor: "black",
+    resolution: 400
+  });
+  // axes.setXPlusFaceProperty({ text: '+X' });
+  axes.setXPlusFaceProperty({
+    text: "+X",
+    faceColor: createRGBStringFromRGBValues(viewColors[0]),
+    faceRotation: 90
+  });
+  axes.setXMinusFaceProperty({
+    text: "-X",
+    faceColor: createRGBStringFromRGBValues(viewColors[0]),
+    faceRotation: 90,
+    fontStyle: "italic"
+  });
+  axes.setYPlusFaceProperty({
+    text: "+Y",
+    faceColor: createRGBStringFromRGBValues(viewColors[1]),
+    fontSizeScale: res => res / 4
+  });
+  axes.setYMinusFaceProperty({
+    text: "-Y",
+    faceColor: createRGBStringFromRGBValues(viewColors[1]),
+    fontColor: "black"
+  });
+  axes.setZPlusFaceProperty({
+    text: "+Z",
+    faceColor: createRGBStringFromRGBValues(viewColors[2])
+  });
+  axes.setZMinusFaceProperty({
+    text: "-Z",
+    faceColor: createRGBStringFromRGBValues(viewColors[2]),
+    faceRotation: 180
+  });
+
+  return axes;
+}
+
+function create3dOutline(image, view3D) {
+  const outline = vtkOutlineFilter.newInstance();
+  outline.setInputData(image);
+  const outlineMapper = vtkMapper.newInstance();
+  outlineMapper.setInputData(outline.getOutputData());
+  const outlineActor = vtkActor.newInstance();
+  outlineActor.setMapper(outlineMapper);
+  view3D.renderer.addActor(outlineActor);
+}
+
+function populate3dScene(viewAttributes, view3D) {
+  viewAttributes.forEach(obj => {
+    console.log("add", obj.resliceActor);
+    view3D.renderer.addActor(obj.resliceActor);
+    obj.sphereActors.forEach(actor => {
+      obj.renderer.addActor(actor);
+      view3D.renderer.addActor(actor);
+    });
+  });
+}
+
+function updateReslice(
+  interactionContext = {
+    viewType: "",
+    reslice: null,
+    actor: null,
+    renderer: null,
+    resetFocalPoint: false, // Reset the focal point to the center of the display image
+    keepFocalPointPosition: false, // Defines if the focal point position is kepts (same display distance from reslice cursor center)
+    computeFocalPointOffset: false, // Defines if the display offset between reslice center and focal point has to be
+    // computed. If so, then this offset will be used to keep the focal point position during rotation.
+    spheres: null
+  }
+) {
+  console.log(" --- UPDATE RESLICE --- ");
+
+  console.log(interactionContext);
+
+  const obj = RCwidget.updateReslicePlane(
+    interactionContext.reslice,
+    interactionContext.viewType
+  );
+
+  if (obj.modified) {
+    // Get returned modified from setter to know if we have to render
+    interactionContext.actor.setUserMatrix(
+      interactionContext.reslice.getResliceAxes()
+    );
+    interactionContext.sphereSources[0].setCenter(...obj.origin);
+    interactionContext.sphereSources[1].setCenter(...obj.point1);
+    interactionContext.sphereSources[2].setCenter(...obj.point2);
+  }
+
+  RCwidget.updateCameraPoints(
+    interactionContext.renderer,
+    interactionContext.viewType,
+    interactionContext.resetFocalPoint,
+    interactionContext.keepFocalPointPosition,
+    interactionContext.computeFocalPointOffset
+  );
+  view3D.renderWindow.render();
+
+  // console.log("updateReslice", interactionContext.reslice);
+  // const distWidget = vtkDistanceWidget.newInstance();
+  // distWidget.placeWidget(
+  //   interactionContext.reslice.getOutputData().getBounds()
+  // );
+  // interactionContext.widgetManager.addWidget(distWidget);
+
+  return obj.modified;
+}
+
+function setupWidgetCallbacks(widget, viewAttributes) {
+  // cycle on 2D scenes, bind events on each widget
+  viewAttributes.forEach((obj, i) => {
+    const reslice = obj.reslice;
+    const viewType = xyzToViewType[i];
+
+    // No need to update plane nor refresh when interaction
+    // is on current view. Plane can't be changed with interaction on current
+    // view. Refreshs happen automatically with `animation`.
+    // Note: Need to refresh also the current view because of adding the mouse wheel
+    // to change slicer
+    viewAttributes.forEach(v => {
+      // Interactions in other views may change current plane
+      v.widgetInstance.onInteractionEvent(
+        // computeFocalPointOffset: Boolean which defines if the offset between focal point and
+        // reslice cursor display center has to be recomputed (while translation is applied)
+        // canUpdateFocalPoint: Boolean which defines if the focal point can be updated because
+        // the current interaction is a rotation
+        ({ computeFocalPointOffset, canUpdateFocalPoint }) => {
+          const activeViewType = widget.getWidgetState().getActiveViewType();
+          const keepFocalPointPosition =
+            activeViewType !== viewType && canUpdateFocalPoint;
+          updateReslice({
+            viewType,
+            reslice,
+            actor: obj.resliceActor,
+            renderer: obj.renderer,
+            resetFocalPoint: false,
+            keepFocalPointPosition,
+            computeFocalPointOffset,
+            sphereSources: obj.sphereSources
+          });
+        }
+      );
+    });
+
+    updateReslice({
+      viewType,
+      reslice,
+      actor: obj.resliceActor,
+      renderer: obj.renderer,
+      resetFocalPoint: true, // At first initilization, center the focal point to the image center
+      keepFocalPointPosition: false, // Don't update the focal point as we already set it to the center of the image
+      computeFocalPointOffset: true, // Allow to compute the current offset between display reslice center and display focal point
+      sphereSources: obj.sphereSources
+    });
+    obj.renderWindow.render();
+  });
+}

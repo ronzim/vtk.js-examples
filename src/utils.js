@@ -132,3 +132,44 @@ export function loadSerieWithLarvitar(cb) {
     });
   });
 }
+
+/**
+ * Function to create synthetic image data with correct dimensions
+ * Can be use for debug
+ * @param {Array[Int]} dims
+ */
+// eslint-disable-next-line no-unused-vars
+function createSyntheticImageData(dims) {
+  const imageData = vtkImageData.newInstance();
+  const newArray = new Uint8Array(dims[0] * dims[1] * dims[2]);
+  const s = 0.1;
+  imageData.setSpacing(s, s, s);
+  imageData.setExtent(0, 127, 0, 127, 0, 127);
+  let i = 0;
+  for (let z = 0; z < dims[2]; z++) {
+    for (let y = 0; y < dims[1]; y++) {
+      for (let x = 0; x < dims[0]; x++) {
+        newArray[i++] = (256 * (i % (dims[0] * dims[1]))) / (dims[0] * dims[1]);
+      }
+    }
+  }
+
+  const da = vtkDataArray.newInstance({
+    numberOfComponents: 1,
+    values: newArray
+  });
+  da.setName("scalars");
+
+  imageData.getPointData().setScalars(da);
+
+  return imageData;
+}
+
+export function createRGBStringFromRGBValues(rgb) {
+  if (rgb.length !== 3) {
+    return "rgb(0, 0, 0)";
+  }
+  return `rgb(${(rgb[0] * 255).toString()}, ${(rgb[1] * 255).toString()}, ${(
+    rgb[2] * 255
+  ).toString()})`;
+}
