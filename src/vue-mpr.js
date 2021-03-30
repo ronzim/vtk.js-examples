@@ -4,9 +4,10 @@
  * - update(data) -> function to call when an event is emitted (on rotate or thickness change)
  *
  * MPR EVENTS TO REMAP
- * onROtate
+ * onRotate
  * onThickness
  * onCrosshairPointSelected
+ * onScrolled
  */
 
 import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
@@ -15,6 +16,7 @@ import { quat, vec3, mat4 } from "gl-matrix";
 
 // Use modified MPRSlice interactor
 import vtkInteractorStyleMPRSlice from "./vue-mpr/vtkInteractorMPRSlice";
+import vtkInteractorStyleMPRWindowLevel from "./vue-mpr/vtkInteractorStyleMPRWindowLevel";
 
 // import ViewportOverlay from "../ViewportOverlay/ViewportOverlay.vue";
 // import MPRInteractor from "../ViewportOverlay/MPRInteractor.vue";
@@ -42,6 +44,21 @@ function degrees2radians(degrees) {
   return (degrees * Math.PI) / 180;
 }
 
+const viewsArray = [
+  {
+    element: document.getElementById("viewer-2"),
+    key: "top"
+  },
+  {
+    element: document.getElementById("viewer-3"),
+    key: "left"
+  },
+  {
+    element: document.getElementById("viewer-4"),
+    key: "front"
+  }
+];
+
 let global_data = {
   // PROPS :  moved to viewport data
   //   volumes: [],
@@ -54,6 +71,7 @@ let global_data = {
   //   onDestroyed: () => {
   //     console.log("DESTROYED");
   //   },
+  syncWindowLevels: true,
   volumes: [],
   views: {
     top: {
@@ -223,45 +241,33 @@ function init(data, key, element) {
   // force the initial draw to set the canvas to the parent bounds.
   onResize(key);
 
-  if (viewportData[key].onCreated) {
-    /**
-     * Note: The contents of this Object are
-     * considered part of the API contract
-     * we make with consumers of this component.
-     */
-    viewportData[key]
-      .onCreated
-      // TODO understand this object function
-      //     {
-      //   genericRenderWindow: data.genericRenderWindow,
-      //   widgetManager: data.widgetManager,
-      //   container: data.$refs.container,
-      //   widgets,
-      //   volumes: [...data.volumes],
-      //   _component: data
-      // }
-      ();
-  }
+  setLevelTool(key);
+
+  //   if (viewportData[key].onCreated) {
+  /**
+   * Note: The contents of this Object are
+   * considered part of the API contract
+   * we make with consumers of this component.
+   */
+  // viewportData[key]
+  //   .onCreated
+  // this was needed to give the possibility to render to the parent component
+  // we should not need it anymore
+  //     {
+  //   genericRenderWindow: data.genericRenderWindow,
+  //   widgetManager: data.widgetManager,
+  //   container: data.$refs.container,
+  //   widgets,
+  //   volumes: [...data.volumes],
+  //   _component: data
+  // }
+  //       ();
+  //   }
 }
 
 /// START ALL
 
 loadSerieWithLarvitar(serie => {
-  const viewsArray = [
-    {
-      element: document.getElementById("viewer-2"),
-      key: "top"
-    },
-    {
-      element: document.getElementById("viewer-3"),
-      key: "left"
-    },
-    {
-      element: document.getElementById("viewer-4"),
-      key: "front"
-    }
-  ];
-
   const image = buildVtkVolume(serie);
 
   // TODO add in init function
@@ -455,3 +461,65 @@ function updateBlendMode(thickness) {
 }
 
 // TODO setInteractor ? (see original code)
+function setInteractor(key, istyle) {
+  const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
+  // We are assuming the old style is always extended from the MPRSlice style
+  const oldStyle = renderWindow.getInteractor().getInteractorStyle();
+
+  renderWindow.getInteractor().setInteractorStyle(istyle);
+  // NOTE: react-vtk-viewport's code put this here, so we're copying it. Seems redundant?
+  istyle.setInteractor(renderWindow.getInteractor());
+
+  // Make sure to set the style to the interactor itself, because reasons...?!
+  const inter = renderWindow.getInteractor();
+  inter.setInteractorStyle(istyle);
+
+  // Copy previous interactors styles into the new one.
+  if (istyle.setSliceNormal && oldStyle.getSliceNormal()) {
+    // console.log("setting slicenormal from old normal");
+    istyle.setSliceNormal(oldStyle.getSliceNormal(), oldStyle.getViewUp());
+  }
+  if (istyle.setSlabThickness && oldStyle.getSlabThickness()) {
+    istyle.setSlabThickness(oldStyle.getSlabThickness());
+  }
+  istyle.setVolumeMapper(viewportData[key].volumes[0]);
+}
+
+function setLevelTool(key) {
+  const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
+  //   istyle.setOnScroll(this.onScrolled); // TODO
+  istyle.setOnLevelsChanged(levels => {
+    updateLevels({ ...levels, srcKey: key });
+  });
+  setInteractor(key, istyle);
+}
+
+function setCrosshairTool([viewportIndex, component]) {
+  const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
+  istyle.setOnScroll(this.onScrolled);
+  istyle.setOnClickCallback(({ worldPos }) =>
+    this.onCrosshairPointSelected({ worldPos, index: viewportIndex })
+  );
+  setInteractor(component, istyle);
+}
+
+// TODO refactoring DV: no need to have ww wc in global_data ?
+function updateLevels({ windowCenter, windowWidth, srcKey }) {
+  global_data.views[srcKey].window.center = windowCenter;
+  global_data.views[srcKey].window.width = windowWidth;
+
+  if (global_data.syncWindowLevels) {
+    let components = viewsArray.map(v => v.key);
+    Object.entries(components)
+      .filter(key => key !== srcKey)
+      .forEach(([i, key]) => {
+        global_data.views[key].window.center = windowCenter;
+        global_data.views[key].window.width = windowWidth;
+        viewportData[key].genericRenderWindow
+          .getInteractor()
+          .getInteractorStyle()
+          .setWindowLevel(windowWidth, windowCenter);
+        viewportData[key].genericRenderWindow.getRenderWindow().render();
+      });
+  }
+}
