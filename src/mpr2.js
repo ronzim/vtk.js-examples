@@ -19,6 +19,7 @@ import vtkRenderWindow from "vtk.js/Sources/Rendering/Core/RenderWindow";
 import vtkRenderWindowInteractor from "vtk.js/Sources/Rendering/Core/RenderWindowInteractor";
 import vtkResliceCursorWidget from "vtk.js/Sources/Widgets/Widgets3D/ResliceCursorWidget";
 import vtkDistanceWidget from "vtk.js/Sources/Widgets/Widgets3D/DistanceWidget";
+import vtkAngleWidget from "vtk.js/Sources/Widgets/Widgets3D/AngleWidget";
 import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
 import vtkColorTransferFunction from "vtk.js/Sources/Rendering/Core/ColorTransferFunction";
 import vtkPiecewiseFunction from "vtk.js/Sources/Common/DataModel/PiecewiseFunction";
@@ -60,6 +61,7 @@ function mpr(image, viewports) {
   // INIT reslice widget
 
   RCwidget = vtkResliceCursorWidget.newInstance();
+  console.log("RCwidget", RCwidget);
   const widgetState = RCwidget.getWidgetState();
   widgetState.setKeepOrthogonality(true);
   widgetState.setOpacity(0.6);
@@ -179,7 +181,7 @@ function mpr(image, viewports) {
   // add 2d slices to 3d
   populate3dScene(viewAttributes, view3D);
 
-  // set image in rc widget
+  // set image in reslice widget
   RCwidget.setImage(image);
 
   // Create image outline in 3D view
@@ -190,6 +192,16 @@ function mpr(image, viewports) {
 
   view3D.renderer.resetCamera();
   view3D.renderer.resetCameraClippingRange();
+
+  // HACK click on each view to force rendering the cubes
+  viewports.forEach(id => {
+    triggerMouseEvent(id, "mousedown");
+    setTimeout(triggerMouseEvent, 25, id, "mouseup");
+  });
+
+  setTimeout(() => {
+    initWidget(image);
+  }, 2000); // why ?
 
   // set max number of slices to slider.
   const maxNumberOfSlices = vec3.length(image.getDimensions());
@@ -414,13 +426,6 @@ function updateReslice(
   );
   view3D.renderWindow.render();
 
-  // console.log("updateReslice", interactionContext.reslice);
-  // const distWidget = vtkDistanceWidget.newInstance();
-  // distWidget.placeWidget(
-  //   interactionContext.reslice.getOutputData().getBounds()
-  // );
-  // interactionContext.widgetManager.addWidget(distWidget);
-
   return obj.modified;
 }
 
@@ -473,3 +478,46 @@ function setupWidgetCallbacks(widget, viewAttributes) {
     obj.renderWindow.render();
   });
 }
+
+function triggerMouseEvent(elementId, eventType) {
+  let element = document.getElementById(elementId);
+  let clickEvent = document.createEvent("MouseEvents");
+  clickEvent.initEvent(eventType, true, true);
+  element.dispatchEvent(clickEvent);
+}
+
+// EXAMPLE of distance widget TODO find how to set handles dimension!
+
+window.initWidget = function initWidget(image) {
+  console.log("init widget", image);
+  console.log(vtkDistanceWidget);
+  const distWidget = vtkDistanceWidget.newInstance();
+  // const distWidget = vtkAngleWidget.newInstance();
+  let bounds = image.getBounds();
+  distWidget.placeWidget(bounds);
+  distWidget.getManipulator().setNormal(1, 0, 0);
+  distWidget
+    .getManipulator()
+    .setOrigin(
+      bounds[1],
+      (bounds[3] + bounds[2]) / 2,
+      (bounds[5] + bounds[4]) / 2
+    );
+
+  let instance = viewAttributes[0].widgetManager.addWidget(distWidget);
+
+  distWidget.getWidgetState().onModified(() => {
+    console.log("DISTANCE", distWidget.getDistance());
+    instance
+      .getWidgetState()
+      .getHandleList()
+      .forEach(h => h.setScale1(10));
+    // console.log("DISTANCE", distWidget.getAngle());
+  });
+
+  view3D.widgetManager.addWidget(distWidget);
+  viewAttributes[0].widgetManager.grabFocus(distWidget);
+  window.widget = distWidget;
+  window.widgetManager = viewAttributes[0].widgetManager;
+  window.widgetInstance = instance;
+};
