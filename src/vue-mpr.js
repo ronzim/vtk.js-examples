@@ -85,7 +85,7 @@ let global_data = {
       slicePlaneYRotation: 0,
       viewRotation: 0,
       sliceThickness: 0.1,
-      blendMode: "none",
+      blendMode: BLEND_MIP,
       window: {
         width: 0,
         center: 0
@@ -99,7 +99,7 @@ let global_data = {
       slicePlaneYRotation: 0,
       viewRotation: 0,
       sliceThickness: 0.1,
-      blendMode: "none",
+      blendMode: BLEND_MIP,
       window: {
         width: 0,
         center: 0
@@ -113,7 +113,7 @@ let global_data = {
       slicePlaneYRotation: 0,
       viewRotation: 0,
       sliceThickness: 0.1,
-      blendMode: "none",
+      blendMode: BLEND_MIP,
       window: {
         width: 0,
         center: 0
@@ -437,30 +437,35 @@ function updateSlicePlane(viewData, key) {
   renderWindow.render();
 }
 
-function updateBlendMode(thickness) {
+function updateBlendMode(key, thickness) {
   if (thickness >= 1) {
-    switch (this.blendMode) {
+    switch (global_data.views[key].blendMode) {
       case BLEND_MIP:
-        this.volumes[0].getMapper().setBlendModeToMaximumIntensity();
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToMaximumIntensity();
         break;
       case BLEND_MINIP:
-        this.volumes[0].getMapper().setBlendModeToMinimumIntensity();
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToMinimumIntensity();
         break;
       case BLEND_AVG:
-        this.volumes[0].getMapper().setBlendModeToAverageIntensity();
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToAverageIntensity();
         break;
       case BLEND_NONE:
       default:
-        this.volumes[0].getMapper().setBlendModeToComposite();
+        viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
         break;
     }
   } else {
-    this.volumes[0].getMapper().setBlendModeToComposite();
+    viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
   }
-  this.renderWindow.render();
+  viewportData[key].renderWindow.render();
 }
 
-// TODO setInteractor ? (see original code)
 function setInteractor(key, istyle) {
   const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
   // We are assuming the old style is always extended from the MPRSlice style
@@ -640,6 +645,40 @@ function onRotate(key, axis, angle) {
   });
 }
 
+function onThickness(key, axis, thickness) {
+  const shouldBeMIP = thickness > 1;
+  let view;
+  switch (key) {
+    case "top":
+      if (axis === "x") view = global_data.views.front;
+      else if (axis === "y") view = global_data.views.left;
+      break;
+    case "left":
+      if (axis === "x") view = global_data.views.top;
+      else if (axis === "y") view = global_data.views.front;
+      break;
+    case "front":
+      if (axis === "x") view = global_data.views.top;
+      else if (axis === "y") view = global_data.views.left;
+      break;
+  }
+
+  view.sliceThickness = thickness;
+  // TODO: consts instead of magic strings
+  if (shouldBeMIP && view.blendMode === "none") view.blendMode = "MIP";
+  // else if(!shouldBeMIP) {
+  //   view.blendMode = "none"
+  // }
+
+  // dv: ex-watcher mpr
+  const istyle = viewportData[key].renderWindow
+    .getInteractor()
+    .getInteractorStyle();
+  // set thickness if the current interactor has it (it should, but just in case)
+  istyle.setSlabThickness && istyle.setSlabThickness(thickness);
+  updateBlendMode(key, thickness);
+}
+
 // TESTING EVENTS
 
 let stateUI = {
@@ -704,3 +743,4 @@ document.addEventListener("keypress", e => {
 });
 
 window.onRotate = onRotate;
+window.onThickness = onThickness;
