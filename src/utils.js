@@ -1,5 +1,6 @@
 import vtkDataArray from "vtk.js/Sources/Common/Core/DataArray";
 import vtkImageData from "vtk.js/Sources/Common/DataModel/ImageData";
+import vtkPlane from "vtk.js/Sources/Common/DataModel/Plane";
 
 export function buildVtkVolume(serie) {
   // TODO load and cache
@@ -23,8 +24,6 @@ export function buildVtkVolume(serie) {
   const spacing = header.volume.pixelSpacing.concat(
     header.volume.sliceThickness // TODO check
   );
-
-  console.log(origin, spacing, numScalars);
 
   volume.setDimensions(dims);
   volume.setOrigin(origin);
@@ -173,3 +172,61 @@ export function createRGBStringFromRGBValues(rgb) {
     rgb[2] * 255
   ).toString()})`;
 }
+
+export function degrees2radians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+export function getVolumeCenter(volumeMapper) {
+  const bounds = volumeMapper.getBounds();
+  return [
+    (bounds[0] + bounds[1]) / 2.0,
+    (bounds[2] + bounds[3]) / 2.0,
+    (bounds[4] + bounds[5]) / 2.0
+  ];
+}
+
+export function getVOI(volume) {
+  // Note: This controls window/level
+
+  // TODO: Make this work reactively with onModified...
+  const rgbTransferFunction = volume.getProperty().getRGBTransferFunction(0);
+  const range = rgbTransferFunction.getMappingRange();
+  const windowWidth = range[0] + range[1];
+  const windowCenter = range[0] + windowWidth / 2;
+
+  return {
+    windowCenter,
+    windowWidth
+  };
+}
+
+/**
+ * Planes are of type `{position:[x,y,z], normal:[x,y,z]}`
+ * returns an [x,y,z] array, or NaN if they do not intersect.
+ */
+export const getPlaneIntersection = (plane1, plane2, plane3) => {
+  try {
+    let line = vtkPlane.intersectWithPlane(
+      plane1.position,
+      plane1.normal,
+      plane2.position,
+      plane2.normal
+    );
+    if (line.intersection) {
+      const { l0, l1 } = line;
+      const intersectionLocation = vtkPlane.intersectWithLine(
+        l0,
+        l1,
+        plane3.position,
+        plane3.normal
+      );
+      if (intersectionLocation.intersection) {
+        return intersectionLocation.x;
+      }
+    }
+  } catch (err) {
+    console.log("some issue calculating the plane intersection", err);
+  }
+  return NaN;
+};

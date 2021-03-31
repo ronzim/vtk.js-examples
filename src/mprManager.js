@@ -1,49 +1,42 @@
-/**
- * MPR LIBRARY LOGIC
- * - init(data, elements) -> data is the mpr state (as data object below), elements are target HTMLelements
- * - update(data) -> function to call when an event is emitted (on rotate or thickness change)
- *
- */
-
-import vtkDistanceWidget from "vtk.js/Sources/Widgets/Widgets3D/DistanceWidget";
-import vtkAngleWidget from "vtk.js/Sources/Widgets/Widgets3D/AngleWidget";
-import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
-
 import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
-import vtkCoordinate from "vtk.js/Sources/Rendering/Core/Coordinate";
-import { quat, vec3, mat4 } from "gl-matrix";
-
-// Use modified MPRSlice interactor
+import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
 import vtkInteractorStyleMPRSlice from "./vue-mpr/vtkInteractorMPRSlice";
+// Use modified MPRSlice interactor
 import vtkInteractorStyleMPRWindowLevel from "./vue-mpr/vtkInteractorStyleMPRWindowLevel";
 import vtkInteractorStyleMPRCrosshairs from "./vue-mpr/vtkInteractorStyleMPRCrosshairs";
-
-// import ViewportOverlay from "../ViewportOverlay/ViewportOverlay.vue";
-// import MPRInteractor from "../ViewportOverlay/MPRInteractor.vue";
-// import { createSub } from "../lib/createSub.js";
-
+import vtkCoordinate from "vtk.js/Sources/Rendering/Core/Coordinate";
+import vtkMatrixBuilder from "vtk.js/Sources/Common/Core/MatrixBuilder";
+// import vtkMath from "vtk.js/Sources/Common/Core/Math";
 import vtkVolume from "vtk.js/Sources/Rendering/Core/Volume";
 import vtkVolumeMapper from "vtk.js/Sources/Rendering/Core/VolumeMapper";
 
-import vtkMatrixBuilder from "vtk.js/Sources/Common/Core/MatrixBuilder";
-// import vtkMath from "vtk.js/Sources/Common/Core/Math";
-import vtkPlane from "vtk.js/Sources/Common/DataModel/Plane";
+import { quat, vec3, mat4 } from "gl-matrix";
 
 import {
-  BLEND_MIP,
-  BLEND_MINIP,
-  BLEND_AVG,
-  BLEND_NONE
-} from "./vue-mpr/consts";
-
-// LOCAL utils
-import {
-  buildVtkVolume,
-  loadSerieWithLarvitar,
   degrees2radians,
-  getVolumeCenter,
-  getPlaneIntersection
+  getPlaneIntersection,
+  getVolumeCenter
 } from "./utils";
+
+/**
+ * MPRManager class
+ *
+ * global_data is more or less the internal state (this),
+ * plus some other internal variable as defaultTool ecc
+ *
+ * methods:
+ *  - onCrosshairPointSelected
+ *  - updateLevels
+ *  - onScrolled
+ *  - onRotate
+ *  - onThickness
+ *  - createVolumeActor
+ *
+ */
+
+const defaultTool = "level";
+const syncWindowLevels = true;
+const VERBOSE = false;
 
 const viewsArray = [
   {
@@ -60,117 +53,71 @@ const viewsArray = [
   }
 ];
 
-const defaultTool = "crosshairs";
-
-let global_data = {
-  sliceIntersection: [0, 0, 0],
-  syncWindowLevels: true,
-  volumes: [],
-  views: {
-    top: {
-      color: "#F8B42C",
-      slicePlaneNormal: [0, 0, 1],
-      sliceViewUp: [0, -1, 0],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: BLEND_MIP,
-      window: {
-        width: 0,
-        center: 0
-      }
-    },
-    left: {
-      color: "#A62CF8",
-      slicePlaneNormal: [1, 0, 0],
-      sliceViewUp: [0, 0, -1],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: BLEND_MIP,
-      window: {
-        width: 0,
-        center: 0
-      }
-    },
-    front: {
-      color: "#2C92F8",
-      slicePlaneNormal: [0, -1, 0],
-      sliceViewUp: [0, 0, -1],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: BLEND_MIP,
-      window: {
-        width: 0,
-        center: 0
-      }
-    }
-  }
-};
-
 let viewportData = {
   top: {
     volumes: [],
-    width: 300, // TODO set container.offsetWidth
-    height: 300, // TODO set container.offsetHight
+    width: 500, // TODO set container.offsetWidth
+    height: 500, // TODO set container.offsetHight
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
     onCreated: () => {
-      console.log("CREATED");
+      if (VERBOSE) console.log("CREATED");
     },
     onDestroyed: () => {
-      console.log("DESTROYED");
+      if (VERBOSE) console.log("DESTROYED");
     },
     subs: {} // TODO
   },
   left: {
     volumes: [],
-    width: 300, // TODO set container.offsetWidth
-    height: 300, // TODO set container.offsetHight
+    width: 500, // TODO set container.offsetWidth
+    height: 500, // TODO set container.offsetHight
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
     onCreated: () => {
-      console.log("CREATED");
+      if (VERBOSE) console.log("CREATED");
     },
     onDestroyed: () => {
-      console.log("DESTROYED");
+      if (VERBOSE) console.log("DESTROYED");
     },
     subs: {} // TODO
   },
   front: {
     volumes: [],
-    width: 300, // TODO set container.offsetWidth
-    height: 300, // TODO set container.offsetHight
+    width: 500, // TODO set container.offsetWidth
+    height: 500, // TODO set container.offsetHight
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
     onCreated: () => {
-      console.log("CREATED");
+      if (VERBOSE) console.log("CREATED");
     },
     onDestroyed: () => {
-      console.log("DESTROYED");
+      if (VERBOSE) console.log("DESTROYED");
     },
     subs: {} // TODO understand if needed
   }
 };
 
-function init(data, key, element) {
-  console.log("DATA", data);
-  console.log("KEY", key);
+export function initMPR(global_data, image) {
+  let actor = createVolumeActor(image);
+  global_data.volumes.push(actor);
+  global_data.sliceIntersection = getVolumeCenter(actor.getMapper());
 
-  // store volumes and element in viewport data
+  Object.entries(global_data.views).forEach(([key, view]) => {
+    initView(global_data, key, view.element);
+  });
+}
+
+export function initView(data, key, element) {
+  // dv: store volumes and element in viewport data
   viewportData[key].volumes = data.volumes;
   viewportData[key].element = element;
 
   // cache the view vectors so we can apply the rotations without modifying the original value
-
-  console.log("spn", [...data.views[key].slicePlaneNormal]);
+  if (VERBOSE) console.log("spn", [...data.views[key].slicePlaneNormal]);
   viewportData[key].cachedSlicePlane = [...data.views[key].slicePlaneNormal];
   viewportData[key].cachedSliceViewUp = [...data.views[key].sliceViewUp];
 
@@ -208,29 +155,30 @@ function init(data, key, element) {
   inter.setInteractorStyle(istyle);
 
   /*
-    // TODO: Use for maintaining clipping range for MIP
-    const interactor = this.renderWindow.getInteractor();
-    //const clippingRange = renderer.getActiveCamera().getClippingRange();
-
-    interactor.onAnimation(() => {
-      renderer.getActiveCamera().setClippingRange(...r);
-    });*/
+       // TODO: Use for maintaining clipping range for MIP
+       const interactor = this.renderWindow.getInteractor();
+       //const clippingRange = renderer.getActiveCamera().getClippingRange();
+   
+       interactor.onAnimation(() => {
+         renderer.getActiveCamera().setClippingRange(...r);
+       });
+    */
 
   //  TODO: assumes the volume is always set for this mounted state...Throw an error?
-  console.log(viewportData[key].volumes);
+  if (VERBOSE) console.log(viewportData[key].volumes);
   const istyleVolumeMapper = viewportData[key].volumes[0].getMapper();
 
   istyle.setVolumeMapper(istyleVolumeMapper);
 
   //start with the volume center slice
   const range = istyle.getSliceRange();
-  // console.log('view mounted: setting the initial range', range)
+  // if (VERBOSE) console.log('view mounted: setting the initial range', range)
   istyle.setSlice((range[0] + range[1]) / 2);
 
   // add the current volumes to the vtk renderer
   updateVolumesForRendering(key);
 
-  console.log(data.views[key]);
+  if (VERBOSE) console.log(data.views[key]);
   updateSlicePlane(data.views[key], key);
 
   // force the initial draw to set the canvas to the parent bounds.
@@ -260,84 +208,6 @@ function init(data, key, element) {
   //   }
 }
 
-/// START ALL
-
-loadSerieWithLarvitar(serie => {
-  const image = buildVtkVolume(serie);
-
-  // TODO add in init function
-  let actor = createVolume(image);
-  global_data.volumes.push(actor);
-
-  for (let view of viewsArray) {
-    console.log(global_data);
-    init(global_data, view.key, view.element);
-  }
-
-  // initWidget(image, "top");
-});
-
-// =====================
-// UTILITY FUNCTIONS ===
-// =====================
-
-// depends on global_data
-function createVolume(contentData) {
-  const volumeActor = vtkVolume.newInstance();
-  const volumeMapper = vtkVolumeMapper.newInstance();
-  volumeMapper.setSampleDistance(1);
-  volumeActor.setMapper(volumeMapper);
-
-  volumeMapper.setInputData(contentData);
-
-  // FIXME: custom range mapping
-  const rgbTransferFunction = volumeActor
-    .getProperty()
-    .getRGBTransferFunction(0);
-  rgbTransferFunction.setMappingRange(500, 3000);
-
-  // update slice min/max values for interface
-  // Crate imageMapper for I,J,K planes
-  // const dataRange = data
-  //   .getPointData()
-  //   .getScalars()
-  //   .getRange();
-  // const extent = data.getExtent();
-  // this.window = {
-  //   min: 0,
-  //   max: dataRange[1] * 2,
-  //   value: dataRange[1]
-  // };
-  // this.level = {
-  //   min: -dataRange[1],
-  //   max: dataRange[1],
-  //   value: (dataRange[0] + dataRange[1]) / 2
-  // };
-  // this.updateColorLevel();
-  // this.updateColorWindow();
-
-  // TODO: find the volume center and set that as the slice intersection point.
-  // TODO: Refactor the MPR slice to set the focal point instead of defaulting to volume center
-
-  global_data.sliceIntersection = getVolumeCenter(volumeMapper); // TODO update on scroll
-
-  return volumeActor;
-}
-
-// TODO
-// depends on volumeData
-function onResize(key) {
-  // TODO: debounce for performance reasons?
-  viewportData[key].genericRenderWindow.resize();
-
-  const [width, height] = [
-    viewportData[key].element.offsetWidth,
-    viewportData[key].element.offsetHeight
-  ];
-  viewportData[key].width = width;
-  viewportData[key].height = height;
-}
-
 // depends on viewportData
 function updateVolumesForRendering(key) {
   viewportData[key].renderer.removeAllVolumes();
@@ -359,7 +229,7 @@ function updateSlicePlane(viewData, key) {
   // cached things are in viewport data
   let cachedSlicePlane = viewportData[key].cachedSlicePlane;
   let cachedSliceViewUp = viewportData[key].cachedSliceViewUp;
-  console.log(viewData);
+  if (VERBOSE) console.log(viewData);
   // TODO: optimize so you don't have to calculate EVERYTHING every time?
 
   // rotate around the vector of the cross product of the plane and viewup as the X component
@@ -395,7 +265,8 @@ function updateSlicePlane(viewData, key) {
     sliceXRotVector
   );
 
-  console.log(cachedSlicePlane, viewData.slicePlaneNormal, planeMat);
+  if (VERBOSE)
+    console.log(cachedSlicePlane, viewData.slicePlaneNormal, planeMat);
 
   vec3.transformMat4(cachedSlicePlane, viewData.slicePlaneNormal, planeMat);
 
@@ -431,62 +302,18 @@ function updateSlicePlane(viewData, key) {
   renderWindow.render();
 }
 
-// depends on global_data AND viewportData
-function updateBlendMode(key, thickness) {
-  if (thickness >= 1) {
-    switch (global_data.views[key].blendMode) {
-      case BLEND_MIP:
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToMaximumIntensity();
-        break;
-      case BLEND_MINIP:
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToMinimumIntensity();
-        break;
-      case BLEND_AVG:
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToAverageIntensity();
-        break;
-      case BLEND_NONE:
-      default:
-        viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
-        break;
-    }
-  } else {
-    viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
-  }
-  viewportData[key].renderWindow.render();
-}
-
+// TODO
 // depends on viewportData
-function setInteractor(key, istyle) {
-  const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
-  // We are assuming the old style is always extended from the MPRSlice style
-  const oldStyle = renderWindow.getInteractor().getInteractorStyle();
+function onResize(key) {
+  // TODO: debounce for performance reasons?
+  viewportData[key].genericRenderWindow.resize();
 
-  renderWindow.getInteractor().setInteractorStyle(istyle);
-  // NOTE: react-vtk-viewport's code put this here, so we're copying it. Seems redundant?
-  istyle.setInteractor(renderWindow.getInteractor());
-
-  // Make sure to set the style to the interactor itself, because reasons...?!
-  const inter = renderWindow.getInteractor();
-  inter.setInteractorStyle(istyle);
-
-  // Copy previous interactors styles into the new one.
-  if (istyle.setSliceNormal && oldStyle.getSliceNormal()) {
-    // console.log("setting slicenormal from old normal");
-    istyle.setSliceNormal(oldStyle.getSliceNormal(), oldStyle.getViewUp());
-  }
-  if (istyle.setSlabThickness && oldStyle.getSlabThickness()) {
-    istyle.setSlabThickness(oldStyle.getSlabThickness());
-  }
-  istyle.setVolumeMapper(viewportData[key].volumes[0]);
-
-  // set current slice (fake) to make distance widget working
-  // istyle.setCurrentImageNumber(0);
+  const [width, height] = [
+    viewportData[key].element.offsetWidth,
+    viewportData[key].element.offsetHeight
+  ];
+  viewportData[key].width = width;
+  viewportData[key].height = height;
 }
 
 function setLevelTool(key) {
@@ -507,29 +334,34 @@ function setCrosshairTool(key) {
   setInteractor(key, istyle);
 }
 
-// depends on global_data AND viewportData
-// TODO refactoring DV: no need to have ww wc in global_data ?
-function updateLevels({ windowCenter, windowWidth, srcKey }) {
-  global_data.views[srcKey].window.center = windowCenter;
-  global_data.views[srcKey].window.width = windowWidth;
+// depends on viewportData
+function setInteractor(key, istyle) {
+  const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
+  // We are assuming the old style is always extended from the MPRSlice style
+  const oldStyle = renderWindow.getInteractor().getInteractorStyle();
 
-  if (global_data.syncWindowLevels) {
-    let components = viewsArray.map(v => v.key);
-    Object.entries(components)
-      .filter(key => key !== srcKey)
-      .forEach(([i, key]) => {
-        global_data.views[key].window.center = windowCenter;
-        global_data.views[key].window.width = windowWidth;
-        viewportData[key].genericRenderWindow
-          .getInteractor()
-          .getInteractorStyle()
-          .setWindowLevel(windowWidth, windowCenter);
-        viewportData[key].genericRenderWindow.getRenderWindow().render();
-      });
+  renderWindow.getInteractor().setInteractorStyle(istyle);
+  // NOTE: react-vtk-viewport's code put this here, so we're copying it. Seems redundant?
+  istyle.setInteractor(renderWindow.getInteractor());
+
+  // Make sure to set the style to the interactor itself, because reasons...?!
+  const inter = renderWindow.getInteractor();
+  inter.setInteractorStyle(istyle);
+
+  // Copy previous interactors styles into the new one.
+  if (istyle.setSliceNormal && oldStyle.getSliceNormal()) {
+    // if (VERBOSE) console.log("setting slicenormal from old normal");
+    istyle.setSliceNormal(oldStyle.getSliceNormal(), oldStyle.getViewUp());
   }
+  if (istyle.setSlabThickness && oldStyle.getSlabThickness()) {
+    istyle.setSlabThickness(oldStyle.getSlabThickness());
+  }
+  istyle.setVolumeMapper(viewportData[key].volumes[0]);
+
+  // set current slice (fake) to make distance widget working
+  // istyle.setCurrentImageNumber(0);
 }
 
-// depends on viewsArray
 function onCrosshairPointSelected({ srcKey, worldPos }) {
   let components = viewsArray.map(v => v.key);
   components.forEach(key => {
@@ -568,6 +400,28 @@ function onCrosshairPointSelected({ srcKey, worldPos }) {
   });
 }
 
+// depends on global_data AND viewportData
+// TODO refactoring DV: no need to have ww wc in global_data ?
+function updateLevels({ windowCenter, windowWidth, srcKey }) {
+  //   global_data.views[srcKey].window.center = windowCenter;
+  //   global_data.views[srcKey].window.width = windowWidth;
+
+  if (syncWindowLevels) {
+    let components = viewsArray.map(v => v.key);
+    Object.entries(components)
+      .filter(key => key !== srcKey)
+      .forEach(([i, key]) => {
+        // global_data.views[key].window.center = windowCenter;
+        // global_data.views[key].window.width = windowWidth;
+        viewportData[key].genericRenderWindow
+          .getInteractor()
+          .getInteractorStyle()
+          .setWindowLevel(windowWidth, windowCenter);
+        viewportData[key].genericRenderWindow.getRenderWindow().render();
+      });
+  }
+}
+
 // depends on viewsArray AND viewportData AND global_data
 function onScrolled() {
   let planes = [];
@@ -585,14 +439,14 @@ function onScrolled() {
   });
   const newPoint = getPlaneIntersection(...planes);
   if (!Number.isNaN(newPoint)) {
-    global_data.sliceIntersection = newPoint;
-    console.log("updating slice intersection", newPoint);
+    //   global_data.sliceIntersection = newPoint; TODO return sliceIntersection
+    if (VERBOSE) console.log("updating slice intersection", newPoint);
   }
 }
 
 // depends on global_data and viewsArray
 // (key, axis: x or y, ABSOLUTE angle in deg)
-function onRotate(key, axis, angle) {
+export function onRotate(key, axis, angle, global_data) {
   // Match the source axis to the associated plane
   switch (key) {
     case "top":
@@ -616,10 +470,12 @@ function onRotate(key, axis, angle) {
   components.filter(c => c !== key).forEach(k => {
     updateSlicePlane(global_data.views[k], k);
   });
+
+  if (VERBOSE) console.log("afterOnRotate", global_data);
 }
 
 // depends on global_data and viewportData
-function onThickness(key, axis, thickness) {
+export function onThickness(key, axis, thickness, global_data) {
   const shouldBeMIP = thickness > 1;
   let view;
   switch (key) {
@@ -650,111 +506,75 @@ function onThickness(key, axis, thickness) {
     .getInteractorStyle();
   // set thickness if the current interactor has it (it should, but just in case)
   istyle.setSlabThickness && istyle.setSlabThickness(thickness);
-  updateBlendMode(key, thickness);
+  updateBlendMode(key, thickness, "MIP");
 }
 
-// EXPERIMENTS
+export function createVolumeActor(contentData) {
+  const volumeActor = vtkVolume.newInstance();
+  const volumeMapper = vtkVolumeMapper.newInstance();
+  volumeMapper.setSampleDistance(1);
+  volumeActor.setMapper(volumeMapper);
 
-function initWidget(image, key) {
-  console.log("init widget", image);
-  console.log(vtkDistanceWidget);
-  const distWidget = vtkDistanceWidget.newInstance();
-  // const distWidget = vtkAngleWidget.newInstance();
-  let bounds = image.getBounds();
-  distWidget.placeWidget(bounds);
-  distWidget.getManipulator().setNormal(1, 0, 0);
-  // distWidget
-  //   .getManipulator()
-  //   .setOrigin(
-  //     bounds[1],
-  //     (bounds[3] + bounds[2]) / 2,
-  //     (bounds[5] + bounds[4]) / 2
-  //   );
+  volumeMapper.setInputData(contentData);
 
-  distWidget.getManipulator().setOrigin(bounds[1], bounds[3], bounds[5]);
+  // FIXME: custom range mapping
+  const rgbTransferFunction = volumeActor
+    .getProperty()
+    .getRGBTransferFunction(0);
+  rgbTransferFunction.setMappingRange(500, 3000);
 
-  let instance = viewportData[key].widgetManager.addWidget(distWidget);
+  // update slice min/max values for interface
+  // Crate imageMapper for I,J,K planes
+  // const dataRange = data
+  //   .getPointData()
+  //   .getScalars()
+  //   .getRange();
+  // const extent = data.getExtent();
+  // this.window = {
+  //   min: 0,
+  //   max: dataRange[1] * 2,
+  //   value: dataRange[1]
+  // };
+  // this.level = {
+  //   min: -dataRange[1],
+  //   max: dataRange[1],
+  //   value: (dataRange[0] + dataRange[1]) / 2
+  // };
+  // this.updateColorLevel();
+  // this.updateColorWindow();
 
-  distWidget.getWidgetState().onModified(() => {
-    console.log("DISTANCE", distWidget.getDistance());
-    instance
-      .getWidgetState()
-      .getHandleList()
-      .forEach(h => h.setScale1(10));
-    // console.log("Angle", distWidget.getAngle());
-  });
+  // TODO: find the volume center and set that as the slice intersection point.
+  // TODO: Refactor the MPR slice to set the focal point instead of defaulting to volume center
 
-  // view3D.widgetManager.addWidget(distWidget);
-  viewportData[key].widgetManager.grabFocus(distWidget);
-  window.widget = distWidget;
-  window.widgetManager = viewportData[key].widgetManager;
-  window.widgetInstance = instance;
+  return volumeActor;
 }
 
-// =====================
-// TESTING EVENTS ======
-// =====================
-
-let stateUI = {
-  top: { x: 0, y: 0 },
-  left: { x: 0, y: 0 },
-  front: { x: 0, y: 0 }
-};
-
-document.addEventListener("keypress", e => {
-  console.log(e);
-  let key, axis;
-
-  switch (e.code) {
-    case "KeyQ":
-      key = "top";
-      axis = "x";
-      break;
-    case "KeyW":
-      key = "top";
-      axis = "y";
-      break;
-    case "KeyE":
-      key = "left";
-      axis = "x";
-      break;
-    case "KeyR":
-      key = "left";
-      axis = "y";
-      break;
-    case "KeyT":
-      key = "front";
-      axis = "x";
-      break;
-    case "KeyY":
-      key = "front";
-      axis = "y";
-      break;
-  }
-
-  if (key && axis) {
-    // MOVE BY +/- 10 deg
-    let oldAngle = stateUI[key][axis];
-    let angle = e.shiftKey ? oldAngle - 10 : oldAngle + 10;
-    console.log(key, axis, oldAngle, angle);
-    onRotate(key, axis, angle);
-    stateUI[key][axis] = angle;
+// depends on viewportData
+function updateBlendMode(key, thickness, blendMode) {
+  if (thickness >= 1) {
+    switch (blendMode) {
+      case "MIP":
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToMaximumIntensity();
+        break;
+      case "MINIP":
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToMinimumIntensity();
+        break;
+      case "AVG":
+        viewportData[key].volumes[0]
+          .getMapper()
+          .setBlendModeToAverageIntensity();
+        break;
+      case "none":
+      default:
+        viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
+        break;
+    }
   } else {
-    // RESET
-    onRotate("top", "x", 0);
-    onRotate("top", "y", 0);
-    onRotate("left", "x", 0);
-    onRotate("left", "y", 0);
-    onRotate("front", "x", 0);
-    onRotate("front", "y", 0);
-    stateUI.top.x = 0;
-    stateUI.top.y = 0;
-    stateUI.left.x = 0;
-    stateUI.left.y = 0;
-    stateUI.front.x = 0;
-    stateUI.front.y = 0;
+    viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
   }
-});
-
-window.onRotate = onRotate;
-window.onThickness = onThickness;
+  viewportData[key].renderWindow.render();
+}
