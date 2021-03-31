@@ -1,6 +1,3 @@
-import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
-import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
-import vtkInteractorStyleMPRSlice from "./vue-mpr/vtkInteractorMPRSlice";
 // Use modified MPRSlice interactor
 import vtkInteractorStyleMPRWindowLevel from "./vue-mpr/vtkInteractorStyleMPRWindowLevel";
 import vtkInteractorStyleMPRCrosshairs from "./vue-mpr/vtkInteractorStyleMPRCrosshairs";
@@ -10,13 +7,13 @@ import vtkMatrixBuilder from "vtk.js/Sources/Common/Core/MatrixBuilder";
 import vtkVolume from "vtk.js/Sources/Rendering/Core/Volume";
 import vtkVolumeMapper from "vtk.js/Sources/Rendering/Core/VolumeMapper";
 
-import { quat, vec3, mat4 } from "gl-matrix";
-
 import {
   degrees2radians,
   getPlaneIntersection,
   getVolumeCenter
 } from "./utils";
+
+import { MPRView } from "./mprView";
 
 /**
  * MPRManager class
@@ -54,51 +51,9 @@ const viewsArray = [
 ];
 
 let viewportData = {
-  top: {
-    volumes: [],
-    width: 500, // TODO set container.offsetWidth
-    height: 500, // TODO set container.offsetHight
-    renderer: null,
-    parallel: false,
-    index: "top", // "top", "front", "side"
-    onCreated: () => {
-      if (VERBOSE) console.log("CREATED");
-    },
-    onDestroyed: () => {
-      if (VERBOSE) console.log("DESTROYED");
-    },
-    subs: {} // TODO
-  },
-  left: {
-    volumes: [],
-    width: 500, // TODO set container.offsetWidth
-    height: 500, // TODO set container.offsetHight
-    renderer: null,
-    parallel: false,
-    index: "top", // "top", "front", "side"
-    onCreated: () => {
-      if (VERBOSE) console.log("CREATED");
-    },
-    onDestroyed: () => {
-      if (VERBOSE) console.log("DESTROYED");
-    },
-    subs: {} // TODO
-  },
-  front: {
-    volumes: [],
-    width: 500, // TODO set container.offsetWidth
-    height: 500, // TODO set container.offsetHight
-    renderer: null,
-    parallel: false,
-    index: "top", // "top", "front", "side"
-    onCreated: () => {
-      if (VERBOSE) console.log("CREATED");
-    },
-    onDestroyed: () => {
-      if (VERBOSE) console.log("DESTROYED");
-    },
-    subs: {} // TODO understand if needed
-  }
+  top: new MPRView("top"),
+  left: new MPRView("left"),
+  front: new MPRView("front")
 };
 
 export function initMPR(global_data, image) {
@@ -107,213 +62,9 @@ export function initMPR(global_data, image) {
   global_data.sliceIntersection = getVolumeCenter(actor.getMapper());
 
   Object.entries(global_data.views).forEach(([key, view]) => {
-    initView(global_data, key, view.element);
+    // initView(global_data, key, view.element);
+    viewportData[key].initView(global_data, key, view.element);
   });
-}
-
-export function initView(data, key, element) {
-  // dv: store volumes and element in viewport data
-  viewportData[key].volumes = data.volumes;
-  viewportData[key].element = element;
-
-  // cache the view vectors so we can apply the rotations without modifying the original value
-  if (VERBOSE) console.log("spn", [...data.views[key].slicePlaneNormal]);
-  viewportData[key].cachedSlicePlane = [...data.views[key].slicePlaneNormal];
-  viewportData[key].cachedSliceViewUp = [...data.views[key].sliceViewUp];
-
-  viewportData[key].genericRenderWindow = vtkGenericRenderWindow.newInstance({
-    background: [0, 0, 0]
-  });
-
-  viewportData[key].genericRenderWindow.setContainer(element);
-
-  let widgets = [];
-
-  viewportData[key].renderWindow = viewportData[
-    key
-  ].genericRenderWindow.getRenderWindow();
-  viewportData[key].renderer = viewportData[
-    key
-  ].genericRenderWindow.getRenderer();
-
-  if (viewportData[key].parallel) {
-    viewportData[key].renderer.getActiveCamera().setParallelProjection(true);
-  }
-
-  // DISTANCE WDG
-  let widgetManager = vtkWidgetManager.newInstance();
-  widgetManager.setRenderer(viewportData[key].renderer);
-  viewportData[key].widgetManager = widgetManager;
-
-  // update view node tree so that vtkOpenGLHardwareSelector can access the vtkOpenGLRenderer instance.
-  const oglrw = viewportData[key].genericRenderWindow.getOpenGLRenderWindow();
-  oglrw.buildPass(true);
-
-  const istyle = vtkInteractorStyleMPRSlice.newInstance();
-  istyle.setOnScroll(data.onStackScroll); // TODO check this
-  const inter = viewportData[key].renderWindow.getInteractor();
-  inter.setInteractorStyle(istyle);
-
-  /*
-       // TODO: Use for maintaining clipping range for MIP
-       const interactor = this.renderWindow.getInteractor();
-       //const clippingRange = renderer.getActiveCamera().getClippingRange();
-   
-       interactor.onAnimation(() => {
-         renderer.getActiveCamera().setClippingRange(...r);
-       });
-    */
-
-  //  TODO: assumes the volume is always set for this mounted state...Throw an error?
-  if (VERBOSE) console.log(viewportData[key].volumes);
-  const istyleVolumeMapper = viewportData[key].volumes[0].getMapper();
-
-  istyle.setVolumeMapper(istyleVolumeMapper);
-
-  //start with the volume center slice
-  const range = istyle.getSliceRange();
-  // if (VERBOSE) console.log('view mounted: setting the initial range', range)
-  istyle.setSlice((range[0] + range[1]) / 2);
-
-  // add the current volumes to the vtk renderer
-  updateVolumesForRendering(key);
-
-  if (VERBOSE) console.log(data.views[key]);
-  updateSlicePlane(data.views[key], key);
-
-  // force the initial draw to set the canvas to the parent bounds.
-  onResize(key);
-
-  defaultTool == "level" ? setLevelTool(key) : setCrosshairTool(key);
-
-  //   if (viewportData[key].onCreated) {
-  /**
-   * Note: The contents of this Object are
-   * considered part of the API contract
-   * we make with consumers of this component.
-   */
-  // viewportData[key]
-  //   .onCreated
-  // this was needed to give the possibility to render to the parent component
-  // we should not need it anymore
-  //     {
-  //   genericRenderWindow: data.genericRenderWindow,
-  //   widgetManager: data.widgetManager,
-  //   container: data.$refs.container,
-  //   widgets,
-  //   volumes: [...data.volumes],
-  //   _component: data
-  // }
-  //       ();
-  //   }
-}
-
-// depends on viewportData
-function updateVolumesForRendering(key) {
-  viewportData[key].renderer.removeAllVolumes();
-  let volumes = viewportData[key].volumes;
-  if (volumes && volumes.length) {
-    volumes.forEach(volume => {
-      if (!volume.isA("vtkVolume")) {
-        console.warn("Data to <Vtk2D> is not vtkVolume data");
-      } else {
-        viewportData[key].renderer.addVolume(volume);
-      }
-    });
-  }
-  viewportData[key].renderWindow.render();
-}
-
-// depends on viewData
-function updateSlicePlane(viewData, key) {
-  // cached things are in viewport data
-  let cachedSlicePlane = viewportData[key].cachedSlicePlane;
-  let cachedSliceViewUp = viewportData[key].cachedSliceViewUp;
-  if (VERBOSE) console.log(viewData);
-  // TODO: optimize so you don't have to calculate EVERYTHING every time?
-
-  // rotate around the vector of the cross product of the plane and viewup as the X component
-  let sliceXRotVector = [];
-  vec3.cross(sliceXRotVector, viewData.sliceViewUp, viewData.slicePlaneNormal);
-  vec3.normalize(sliceXRotVector, sliceXRotVector);
-
-  // rotate the viewUp vector as the Y component
-  let sliceYRotVector = viewData.sliceViewUp;
-
-  // const yQuat = quat.create();
-  // quat.setAxisAngle(yQuat, input.sliceViewUp, degrees2radians(viewData.slicePlaneYRotation));
-  // quat.normalize(yQuat, yQuat);
-
-  // Rotate the slicePlaneNormal using the x & y rotations.
-  // const planeQuat = quat.create();
-  // quat.add(planeQuat, xQuat, yQuat);
-  // quat.normalize(planeQuat, planeQuat);
-
-  // vec3.transformQuat(viewData.cachedSlicePlane, viewData.slicePlaneNormal, planeQuat);
-
-  const planeMat = mat4.create();
-  mat4.rotate(
-    planeMat,
-    planeMat,
-    degrees2radians(viewData.slicePlaneYRotation),
-    sliceYRotVector
-  );
-  mat4.rotate(
-    planeMat,
-    planeMat,
-    degrees2radians(viewData.slicePlaneXRotation),
-    sliceXRotVector
-  );
-
-  if (VERBOSE)
-    console.log(cachedSlicePlane, viewData.slicePlaneNormal, planeMat);
-
-  vec3.transformMat4(cachedSlicePlane, viewData.slicePlaneNormal, planeMat);
-
-  // Rotate the viewUp in 90 degree increments
-  const viewRotQuat = quat.create();
-  // Use - degrees since the axis of rotation should really be the direction of projection, which is the negative of the plane normal
-  quat.setAxisAngle(
-    viewRotQuat,
-    cachedSlicePlane,
-    degrees2radians(-viewData.viewRotation)
-  );
-  quat.normalize(viewRotQuat, viewRotQuat);
-
-  // rotate the ViewUp with the x and z rotations
-  const xQuat = quat.create();
-  quat.setAxisAngle(
-    xQuat,
-    sliceXRotVector,
-    degrees2radians(viewData.slicePlaneXRotation)
-  );
-  quat.normalize(xQuat, xQuat);
-  const viewUpQuat = quat.create();
-  quat.add(viewUpQuat, xQuat, viewRotQuat);
-  vec3.transformQuat(cachedSliceViewUp, viewData.sliceViewUp, viewRotQuat);
-
-  // update the view's slice
-  const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
-  const istyle = renderWindow.getInteractor().getInteractorStyle();
-  if (istyle && istyle.setSliceNormal) {
-    istyle.setSliceNormal(cachedSlicePlane, cachedSliceViewUp);
-  }
-
-  renderWindow.render();
-}
-
-// TODO
-// depends on viewportData
-function onResize(key) {
-  // TODO: debounce for performance reasons?
-  viewportData[key].genericRenderWindow.resize();
-
-  const [width, height] = [
-    viewportData[key].element.offsetWidth,
-    viewportData[key].element.offsetHeight
-  ];
-  viewportData[key].width = width;
-  viewportData[key].height = height;
 }
 
 function setLevelTool(key) {
