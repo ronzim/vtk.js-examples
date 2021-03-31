@@ -17,6 +17,7 @@ import { quat, vec3, mat4 } from "gl-matrix";
 // Use modified MPRSlice interactor
 import vtkInteractorStyleMPRSlice from "./vue-mpr/vtkInteractorMPRSlice";
 import vtkInteractorStyleMPRWindowLevel from "./vue-mpr/vtkInteractorStyleMPRWindowLevel";
+import vtkInteractorStyleMPRCrosshairs from "./vue-mpr/vtkInteractorStyleMPRCrosshairs";
 
 // import ViewportOverlay from "../ViewportOverlay/ViewportOverlay.vue";
 // import MPRInteractor from "../ViewportOverlay/MPRInteractor.vue";
@@ -59,12 +60,14 @@ const viewsArray = [
   }
 ];
 
+const defaultTool = "crosshairs";
+
 let global_data = {
   // PROPS :  moved to viewport data
   //   volumes: [],
   //   parallel: false,
   //   index: "top", // "top", "front", "side"
-  //   sliceIntersection: [0, 0, 0],
+  sliceIntersection: [0, 0, 0],
   //   onCreated: () => {
   //     console.log("CREATED");
   //   },
@@ -127,7 +130,6 @@ let viewportData = {
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
-    sliceIntersection: [0, 0, 0],
     onCreated: () => {
       console.log("CREATED");
     },
@@ -143,7 +145,6 @@ let viewportData = {
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
-    sliceIntersection: [0, 0, 0],
     onCreated: () => {
       console.log("CREATED");
     },
@@ -159,7 +160,6 @@ let viewportData = {
     renderer: null,
     parallel: false,
     index: "top", // "top", "front", "side"
-    sliceIntersection: [0, 0, 0],
     onCreated: () => {
       console.log("CREATED");
     },
@@ -241,7 +241,7 @@ function init(data, key, element) {
   // force the initial draw to set the canvas to the parent bounds.
   onResize(key);
 
-  setLevelTool(key);
+  defaultTool == "level" ? setLevelTool(key) : setCrosshairTool(key);
 
   //   if (viewportData[key].onCreated) {
   /**
@@ -487,20 +487,20 @@ function setInteractor(key, istyle) {
 
 function setLevelTool(key) {
   const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
-  //   istyle.setOnScroll(this.onScrolled); // TODO
+  istyle.setOnScroll(onScrolled);
   istyle.setOnLevelsChanged(levels => {
     updateLevels({ ...levels, srcKey: key });
   });
   setInteractor(key, istyle);
 }
 
-function setCrosshairTool([viewportIndex, component]) {
+function setCrosshairTool(key) {
   const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
-  istyle.setOnScroll(this.onScrolled);
+  istyle.setOnScroll(onScrolled);
   istyle.setOnClickCallback(({ worldPos }) =>
-    this.onCrosshairPointSelected({ worldPos, index: viewportIndex })
+    onCrosshairPointSelected({ worldPos, srcKey: key })
   );
-  setInteractor(component, istyle);
+  setInteractor(key, istyle);
 }
 
 // TODO refactoring DV: no need to have ww wc in global_data ?
@@ -523,3 +523,184 @@ function updateLevels({ windowCenter, windowWidth, srcKey }) {
       });
   }
 }
+
+function onCrosshairPointSelected({ srcKey, worldPos }) {
+  let components = viewsArray.map(v => v.key);
+  components.forEach(key => {
+    if (key !== srcKey) {
+      // We are basically doing the same as getSlice but with the world coordinate
+      // that we want to jump to instead of the camera focal point.
+      // I would rather do the camera adjustment directly but I keep
+      // doing it wrong and so this is good enough for now.
+      // ~ swerik
+      const renderWindow = viewportData[
+        key
+      ].genericRenderWindow.getRenderWindow();
+
+      const istyle = renderWindow.getInteractor().getInteractorStyle();
+      const sliceNormal = istyle.getSliceNormal();
+      const transform = vtkMatrixBuilder
+        .buildFromDegree()
+        .identity()
+        .rotateFromDirections(sliceNormal, [1, 0, 0]);
+
+      const mutatedWorldPos = worldPos.slice();
+      transform.apply(mutatedWorldPos);
+      const slice = mutatedWorldPos[0];
+
+      istyle.setSlice(slice);
+
+      renderWindow.render();
+    }
+
+    const renderer = viewportData[key].genericRenderWindow.getRenderer();
+    const wPos = vtkCoordinate.newInstance();
+    wPos.setCoordinateSystemToWorld();
+    wPos.setValue(worldPos);
+
+    const displayPosition = wPos.getComputedDisplayValue(renderer);
+  });
+}
+
+function onScrolled() {
+  let planes = [];
+  let components = viewsArray.map(v => v.key);
+  components.forEach(key => {
+    const camera = viewportData[key].genericRenderWindow
+      .getRenderer()
+      .getActiveCamera();
+
+    planes.push({
+      position: camera.getFocalPoint(),
+      normal: camera.getDirectionOfProjection()
+      // this[viewportIndex].slicePlaneNormal
+    });
+  });
+  const newPoint = getPlaneIntersection(...planes);
+  if (!Number.isNaN(newPoint)) {
+    global_data.sliceIntersection = newPoint;
+    console.log("updating slice intersection", newPoint);
+  }
+}
+
+/**
+ * Planes are of type `{position:[x,y,z], normal:[x,y,z]}`
+ * returns an [x,y,z] array, or NaN if they do not intersect.
+ */
+const getPlaneIntersection = (plane1, plane2, plane3) => {
+  try {
+    let line = vtkPlane.intersectWithPlane(
+      plane1.position,
+      plane1.normal,
+      plane2.position,
+      plane2.normal
+    );
+    if (line.intersection) {
+      const { l0, l1 } = line;
+      const intersectionLocation = vtkPlane.intersectWithLine(
+        l0,
+        l1,
+        plane3.position,
+        plane3.normal
+      );
+      if (intersectionLocation.intersection) {
+        return intersectionLocation.x;
+      }
+    }
+  } catch (err) {
+    console.log("some issue calculating the plane intersection", err);
+  }
+  return NaN;
+};
+
+// (key, axis: x or y, ABSOLUTE angle in deg)
+function onRotate(key, axis, angle) {
+  // Match the source axis to the associated plane
+  switch (key) {
+    case "top":
+      if (axis === "x") global_data.views.front.slicePlaneYRotation = angle;
+      else if (axis === "y") global_data.views.left.slicePlaneYRotation = angle;
+      break;
+    case "left":
+      if (axis === "x") global_data.views.top.slicePlaneXRotation = angle;
+      else if (axis === "y")
+        global_data.views.front.slicePlaneXRotation = angle;
+      break;
+    case "front":
+      if (axis === "x") global_data.views.top.slicePlaneYRotation = angle;
+      else if (axis === "y") global_data.views.left.slicePlaneXRotation = angle;
+      break;
+  }
+
+  // dv: this was a watcher in mpr component, update all except myself ?
+
+  let components = viewsArray.map(v => v.key);
+  components.filter(c => c !== key).forEach(k => {
+    updateSlicePlane(global_data.views[k], k);
+  });
+}
+
+// TESTING EVENTS
+
+let stateUI = {
+  top: { x: 0, y: 0 },
+  left: { x: 0, y: 0 },
+  front: { x: 0, y: 0 }
+};
+
+document.addEventListener("keypress", e => {
+  console.log(e);
+  let key, axis;
+
+  switch (e.code) {
+    case "KeyQ":
+      key = "top";
+      axis = "x";
+      break;
+    case "KeyW":
+      key = "top";
+      axis = "y";
+      break;
+    case "KeyE":
+      key = "left";
+      axis = "x";
+      break;
+    case "KeyR":
+      key = "left";
+      axis = "y";
+      break;
+    case "KeyT":
+      key = "front";
+      axis = "x";
+      break;
+    case "KeyY":
+      key = "front";
+      axis = "y";
+      break;
+  }
+
+  if (key && axis) {
+    // MOVE BY +/- 10 deg
+    let oldAngle = stateUI[key][axis];
+    let angle = e.shiftKey ? oldAngle - 10 : oldAngle + 10;
+    console.log(key, axis, oldAngle, angle);
+    onRotate(key, axis, angle);
+    stateUI[key][axis] = angle;
+  } else {
+    // RESET
+    onRotate("top", "x", 0);
+    onRotate("top", "y", 0);
+    onRotate("left", "x", 0);
+    onRotate("left", "y", 0);
+    onRotate("front", "x", 0);
+    onRotate("front", "y", 0);
+    stateUI.top.x = 0;
+    stateUI.top.y = 0;
+    stateUI.left.x = 0;
+    stateUI.left.y = 0;
+    stateUI.front.x = 0;
+    stateUI.front.y = 0;
+  }
+});
+
+window.onRotate = onRotate;
