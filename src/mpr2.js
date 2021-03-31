@@ -8,7 +8,7 @@ import vtkImageMapper from "vtk.js/Sources/Rendering/Core/ImageMapper";
 import vtkImageReslice from "vtk.js/Sources/Imaging/Core/ImageReslice";
 import vtkImageSlice from "vtk.js/Sources/Rendering/Core/ImageSlice";
 import vtkInteractorStyleImage from "vtk.js/Sources/Interaction/Style/InteractorStyleImage";
-// import vtkInteractorStyleImage from "./interactor";
+//import vtkInteractorStyleImage from "./interactor";
 import vtkInteractorStyleTrackballCamera from "vtk.js/Sources/Interaction/Style/InteractorStyleTrackballCamera";
 import vtkMapper from "vtk.js/Sources/Rendering/Core/Mapper";
 import vtkOutlineFilter from "vtk.js/Sources/Filters/General/OutlineFilter";
@@ -50,6 +50,7 @@ const viewColors = [
 ];
 
 const showDebugActors = false;
+const measureWidget = true;
 
 const viewAttributes = [];
 let RCwidget = null;
@@ -199,9 +200,11 @@ function mpr(image, viewports) {
     setTimeout(triggerMouseEvent, 25, id, "mouseup");
   });
 
-  setTimeout(() => {
-    initWidget(image);
-  }, 2000); // why ?
+  if (measureWidget) {
+    setTimeout(() => {
+      initWidget(image);
+    }, 2000); // why ?
+  }
 
   // set max number of slices to slider.
   const maxNumberOfSlices = vec3.length(image.getDimensions());
@@ -486,8 +489,7 @@ function triggerMouseEvent(elementId, eventType) {
   element.dispatchEvent(clickEvent);
 }
 
-// EXAMPLE of distance widget TODO find how to set handles dimension!
-
+// EXAMPLE of distance widget
 window.initWidget = function initWidget(image) {
   console.log("init widget", image);
   console.log(vtkDistanceWidget);

@@ -64,6 +64,7 @@ function vtkInteractorStyleMPRCrosshairs(publicAPI, model) {
   }
 
   function launchCallback(callData) {
+    console.log(callData);
     const pos = [callData.position.x, callData.position.y];
     const renderer = callData.pokedRenderer;
     const onClickCallback = publicAPI.getOnClickCallback();

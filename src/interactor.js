@@ -43,6 +43,7 @@ function vtkInteractorStyleImage(publicAPI, model) {
   publicAPI.superHandleLeftButtonPress = publicAPI.handleLeftButtonPress;
   publicAPI.handleLeftButtonPress = callData => {
     const pos = callData.position;
+    console.log(pos);
 
     if (!callData.shiftKey && !callData.controlKey) {
       model.windowLevelStartPosition[0] = pos.x;

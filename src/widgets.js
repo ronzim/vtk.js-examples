@@ -14,7 +14,8 @@ import vtkColorMaps from "vtk.js/Sources/Rendering/Core/ColorTransferFunction/Co
 
 // --- Set up our renderer ---
 
-const container = document.querySelector("#viewer");
+// const container = document.querySelector("#viewer");
+const container = document.getElementById("viewer-2");
 
 // We use the wrapper here to abstract out manual RenderWindow/Renderer/OpenGLRenderWindow setup
 const genericRenderWindow = vtkGenericRenderWindow.newInstance();

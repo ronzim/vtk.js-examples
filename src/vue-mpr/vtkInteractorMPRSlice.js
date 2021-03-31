@@ -76,7 +76,7 @@ function vtkInteractorStyleMPRSlice(publicAPI, model) {
 
   function updateScrollManipulator() {
     const range = publicAPI.getSliceRange();
-    console.log("updating the manipulator", range);
+    // console.log("updating the manipulator", range);
     model.scrollManipulator.removeScrollListener();
     // The Scroll listener has min, max, step, and getValue setValue as params.
     // Internally, it checks that the result of the GET has changed, and only calls SET if it is new.

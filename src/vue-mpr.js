@@ -5,6 +5,10 @@
  *
  */
 
+import vtkDistanceWidget from "vtk.js/Sources/Widgets/Widgets3D/DistanceWidget";
+import vtkAngleWidget from "vtk.js/Sources/Widgets/Widgets3D/AngleWidget";
+import vtkWidgetManager from "vtk.js/Sources/Widgets/Core/WidgetManager";
+
 import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
 import vtkCoordinate from "vtk.js/Sources/Rendering/Core/Coordinate";
 import { quat, vec3, mat4 } from "gl-matrix";
@@ -197,6 +201,11 @@ function init(data, key, element) {
     viewportData[key].renderer.getActiveCamera().setParallelProjection(true);
   }
 
+  // DISTANCE WDG
+  let widgetManager = vtkWidgetManager.newInstance();
+  widgetManager.setRenderer(viewportData[key].renderer);
+  viewportData[key].widgetManager = widgetManager;
+
   // update view node tree so that vtkOpenGLHardwareSelector can access the vtkOpenGLRenderer instance.
   const oglrw = viewportData[key].genericRenderWindow.getOpenGLRenderWindow();
   oglrw.buildPass(true);
@@ -270,8 +279,10 @@ loadSerieWithLarvitar(serie => {
 
   for (let view of viewsArray) {
     console.log(global_data);
-    init(global_data, view.key, view.element, image);
+    init(global_data, view.key, view.element);
   }
+
+  // initWidget(image, "top");
 });
 
 // UTILITY FUNCTIONS
@@ -482,6 +493,9 @@ function setInteractor(key, istyle) {
     istyle.setSlabThickness(oldStyle.getSlabThickness());
   }
   istyle.setVolumeMapper(viewportData[key].volumes[0]);
+
+  // set current slice (fake) to make distance widget working
+  // istyle.setCurrentImageNumber(0);
 }
 
 function setLevelTool(key) {
@@ -496,9 +510,9 @@ function setLevelTool(key) {
 function setCrosshairTool(key) {
   const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
   istyle.setOnScroll(onScrolled);
-  istyle.setOnClickCallback(({ worldPos }) =>
-    onCrosshairPointSelected({ worldPos, srcKey: key })
-  );
+  istyle.setOnClickCallback(({ worldPos }) => {
+    onCrosshairPointSelected({ worldPos, srcKey: key });
+  });
   setInteractor(key, istyle);
 }
 
@@ -686,6 +700,44 @@ function onThickness(key, axis, thickness) {
   // set thickness if the current interactor has it (it should, but just in case)
   istyle.setSlabThickness && istyle.setSlabThickness(thickness);
   updateBlendMode(key, thickness);
+}
+
+// EXPERIMENTS
+
+function initWidget(image, key) {
+  console.log("init widget", image);
+  console.log(vtkDistanceWidget);
+  const distWidget = vtkDistanceWidget.newInstance();
+  // const distWidget = vtkAngleWidget.newInstance();
+  let bounds = image.getBounds();
+  distWidget.placeWidget(bounds);
+  distWidget.getManipulator().setNormal(1, 0, 0);
+  // distWidget
+  //   .getManipulator()
+  //   .setOrigin(
+  //     bounds[1],
+  //     (bounds[3] + bounds[2]) / 2,
+  //     (bounds[5] + bounds[4]) / 2
+  //   );
+
+  distWidget.getManipulator().setOrigin(bounds[1], bounds[3], bounds[5]);
+
+  let instance = viewportData[key].widgetManager.addWidget(distWidget);
+
+  distWidget.getWidgetState().onModified(() => {
+    console.log("DISTANCE", distWidget.getDistance());
+    instance
+      .getWidgetState()
+      .getHandleList()
+      .forEach(h => h.setScale1(10));
+    // console.log("Angle", distWidget.getAngle());
+  });
+
+  // view3D.widgetManager.addWidget(distWidget);
+  viewportData[key].widgetManager.grabFocus(distWidget);
+  window.widget = distWidget;
+  window.widgetManager = viewportData[key].widgetManager;
+  window.widgetInstance = instance;
 }
 
 // TESTING EVENTS
