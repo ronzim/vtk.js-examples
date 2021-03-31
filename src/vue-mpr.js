@@ -3,11 +3,6 @@
  * - init(data, elements) -> data is the mpr state (as data object below), elements are target HTMLelements
  * - update(data) -> function to call when an event is emitted (on rotate or thickness change)
  *
- * MPR EVENTS TO REMAP
- * onRotate
- * onThickness
- * onCrosshairPointSelected
- * onScrolled
  */
 
 import vtkGenericRenderWindow from "vtk.js/Sources/Rendering/Misc/GenericRenderWindow";
@@ -23,7 +18,6 @@ import vtkInteractorStyleMPRCrosshairs from "./vue-mpr/vtkInteractorStyleMPRCros
 // import MPRInteractor from "../ViewportOverlay/MPRInteractor.vue";
 // import { createSub } from "../lib/createSub.js";
 
-import vtkHttpDataSetReader from "vtk.js/Sources/IO/Core/HttpDataSetReader";
 import vtkVolume from "vtk.js/Sources/Rendering/Core/Volume";
 import vtkVolumeMapper from "vtk.js/Sources/Rendering/Core/VolumeMapper";
 
@@ -587,6 +581,21 @@ function onScrolled() {
     console.log("updating slice intersection", newPoint);
   }
 }
+
+const getVOI = volume => {
+  // Note: This controls window/level
+
+  // TODO: Make this work reactively with onModified...
+  const rgbTransferFunction = volume.getProperty().getRGBTransferFunction(0);
+  const range = rgbTransferFunction.getMappingRange();
+  const windowWidth = range[0] + range[1];
+  const windowCenter = range[0] + windowWidth / 2;
+
+  return {
+    windowCenter,
+    windowWidth
+  };
+};
 
 /**
  * Planes are of type `{position:[x,y,z], normal:[x,y,z]}`
