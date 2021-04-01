@@ -12,21 +12,19 @@ import { degrees2radians } from "./utils";
  * viewportData is the internal state (this)
  *
  * methods:
- *  - initView
- *  - updateVolumesForRendering
- *  - updateSlicePlane
- *  - onResize
+ *  - initView OK
+ *  - updateVolumesForRendering OK
+ *  - updateSlicePlane OK
+ *  - onResize OK
  *  - setLevelTool
  *  - setCrosshairTool
  *  - setInteractor
  *  - onCrosshairPointSelected ? must update other views -> need a just a setter for worldPos
  *  - updateLevels ? idem, just a setter for wwwl
- *  - updateBlendMode
+ *  - updateBlendMode OK
  *
  *  - setter for height and width
  */
-
-const defaultTool = true;
 
 export class MPRView {
   constructor(key) {
@@ -110,9 +108,6 @@ export class MPRView {
 
     // force the initial draw to set the canvas to the parent bounds.
     this.onResize(key);
-
-    // TODO manage pass tool information up to manager
-    // defaultTool == "level" ? setLevelTool(key) : setCrosshairTool(key);
 
     if (this.onCreated) {
       this.onCreated();
@@ -225,5 +220,55 @@ export class MPRView {
     ];
     this.width = width;
     this.height = height;
+  }
+
+  updateBlendMode(thickness, blendMode) {
+    if (thickness >= 1) {
+      switch (blendMode) {
+        case "MIP":
+          this.volumes[0].getMapper().setBlendModeToMaximumIntensity();
+          break;
+        case "MINIP":
+          this.volumes[0].getMapper().setBlendModeToMinimumIntensity();
+          break;
+        case "AVG":
+          this.volumes[0].getMapper().setBlendModeToAverageIntensity();
+          break;
+        case "none":
+        default:
+          this.volumes[0].getMapper().setBlendModeToComposite();
+          break;
+      }
+    } else {
+      this.volumes[0].getMapper().setBlendModeToComposite();
+    }
+    this.renderWindow.render();
+  }
+
+  setInteractor(istyle) {
+    const renderWindow = this.genericRenderWindow.getRenderWindow();
+    // We are assuming the old style is always extended from the MPRSlice style
+    const oldStyle = renderWindow.getInteractor().getInteractorStyle();
+
+    renderWindow.getInteractor().setInteractorStyle(istyle);
+    // NOTE: react-vtk-viewport's code put this here, so we're copying it. Seems redundant?
+    istyle.setInteractor(renderWindow.getInteractor());
+
+    // Make sure to set the style to the interactor itself, because reasons...?!
+    const inter = renderWindow.getInteractor();
+    inter.setInteractorStyle(istyle);
+
+    // Copy previous interactors styles into the new one.
+    if (istyle.setSliceNormal && oldStyle.getSliceNormal()) {
+      // if (VERBOSE) console.log("setting slicenormal from old normal");
+      istyle.setSliceNormal(oldStyle.getSliceNormal(), oldStyle.getViewUp());
+    }
+    if (istyle.setSlabThickness && oldStyle.getSlabThickness()) {
+      istyle.setSlabThickness(oldStyle.getSlabThickness());
+    }
+    istyle.setVolumeMapper(this.volumes[0]);
+
+    // set current slice (fake) to make distance widget working
+    // istyle.setCurrentImageNumber(0);
   }
 }

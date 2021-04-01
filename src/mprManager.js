@@ -7,11 +7,7 @@ import vtkMatrixBuilder from "vtk.js/Sources/Common/Core/MatrixBuilder";
 import vtkVolume from "vtk.js/Sources/Rendering/Core/Volume";
 import vtkVolumeMapper from "vtk.js/Sources/Rendering/Core/VolumeMapper";
 
-import {
-  degrees2radians,
-  getPlaneIntersection,
-  getVolumeCenter
-} from "./utils";
+import { getPlaneIntersection, getVolumeCenter } from "./utils";
 
 import { MPRView } from "./mprView";
 
@@ -31,7 +27,7 @@ import { MPRView } from "./mprView";
  *
  */
 
-const defaultTool = "level";
+const defaultTool = true;
 const syncWindowLevels = true;
 const VERBOSE = false;
 
@@ -65,52 +61,32 @@ export function initMPR(global_data, image) {
     // initView(global_data, key, view.element);
     viewportData[key].initView(global_data, key, view.element);
   });
+
+  defaultTool == "level"
+    ? setLevelTool(global_data)
+    : setCrosshairTool(global_data);
 }
 
-function setLevelTool(key) {
-  const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
-  istyle.setOnScroll(onScrolled);
-  istyle.setOnLevelsChanged(levels => {
-    updateLevels({ ...levels, srcKey: key });
+function setLevelTool(global_data) {
+  Object.entries(global_data.views).forEach(([key]) => {
+    const istyle = vtkInteractorStyleMPRWindowLevel.newInstance();
+    istyle.setOnScroll(onScrolled);
+    istyle.setOnLevelsChanged(levels => {
+      updateLevels({ ...levels, srcKey: key });
+    });
+    viewportData[key].setInteractor(istyle);
   });
-  setInteractor(key, istyle);
 }
 
-function setCrosshairTool(key) {
-  const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
-  istyle.setOnScroll(onScrolled);
-  istyle.setOnClickCallback(({ worldPos }) => {
-    onCrosshairPointSelected({ worldPos, srcKey: key });
+function setCrosshairTool(global_data) {
+  Object.entries(global_data.views).forEach(([key]) => {
+    const istyle = vtkInteractorStyleMPRCrosshairs.newInstance();
+    istyle.setOnScroll(onScrolled);
+    istyle.setOnClickCallback(({ worldPos }) => {
+      onCrosshairPointSelected({ worldPos, srcKey: key });
+    });
+    viewportData[key].setInteractor(istyle);
   });
-  setInteractor(key, istyle);
-}
-
-// depends on viewportData
-function setInteractor(key, istyle) {
-  const renderWindow = viewportData[key].genericRenderWindow.getRenderWindow();
-  // We are assuming the old style is always extended from the MPRSlice style
-  const oldStyle = renderWindow.getInteractor().getInteractorStyle();
-
-  renderWindow.getInteractor().setInteractorStyle(istyle);
-  // NOTE: react-vtk-viewport's code put this here, so we're copying it. Seems redundant?
-  istyle.setInteractor(renderWindow.getInteractor());
-
-  // Make sure to set the style to the interactor itself, because reasons...?!
-  const inter = renderWindow.getInteractor();
-  inter.setInteractorStyle(istyle);
-
-  // Copy previous interactors styles into the new one.
-  if (istyle.setSliceNormal && oldStyle.getSliceNormal()) {
-    // if (VERBOSE) console.log("setting slicenormal from old normal");
-    istyle.setSliceNormal(oldStyle.getSliceNormal(), oldStyle.getViewUp());
-  }
-  if (istyle.setSlabThickness && oldStyle.getSlabThickness()) {
-    istyle.setSlabThickness(oldStyle.getSlabThickness());
-  }
-  istyle.setVolumeMapper(viewportData[key].volumes[0]);
-
-  // set current slice (fake) to make distance widget working
-  // istyle.setCurrentImageNumber(0);
 }
 
 function onCrosshairPointSelected({ srcKey, worldPos }) {
@@ -219,7 +195,7 @@ export function onRotate(key, axis, angle, global_data) {
 
   let components = viewsArray.map(v => v.key);
   components.filter(c => c !== key).forEach(k => {
-    updateSlicePlane(global_data.views[k], k);
+    viewportData[k].updateSlicePlane(global_data.views[k]);
   });
 
   if (VERBOSE) console.log("afterOnRotate", global_data);
@@ -257,7 +233,7 @@ export function onThickness(key, axis, thickness, global_data) {
     .getInteractorStyle();
   // set thickness if the current interactor has it (it should, but just in case)
   istyle.setSlabThickness && istyle.setSlabThickness(thickness);
-  updateBlendMode(key, thickness, "MIP");
+  viewportData[key].updateBlendMode(thickness, "MIP");
 }
 
 export function createVolumeActor(contentData) {
@@ -298,34 +274,4 @@ export function createVolumeActor(contentData) {
   // TODO: Refactor the MPR slice to set the focal point instead of defaulting to volume center
 
   return volumeActor;
-}
-
-// depends on viewportData
-function updateBlendMode(key, thickness, blendMode) {
-  if (thickness >= 1) {
-    switch (blendMode) {
-      case "MIP":
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToMaximumIntensity();
-        break;
-      case "MINIP":
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToMinimumIntensity();
-        break;
-      case "AVG":
-        viewportData[key].volumes[0]
-          .getMapper()
-          .setBlendModeToAverageIntensity();
-        break;
-      case "none":
-      default:
-        viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
-        break;
-    }
-  } else {
-    viewportData[key].volumes[0].getMapper().setBlendModeToComposite();
-  }
-  viewportData[key].renderWindow.render();
 }
