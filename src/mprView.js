@@ -28,7 +28,7 @@ import { degrees2radians } from "./utils";
 
 export class MPRView {
   constructor(key) {
-    this.VERBOSE = true;
+    this.VERBOSE = false;
     this.key = key;
     this.volumes = [];
     this.width = 300; // TODO set container.offsetWidth

@@ -1,6 +1,8 @@
 import vtkDataArray from "vtk.js/Sources/Common/Core/DataArray";
 import vtkImageData from "vtk.js/Sources/Common/DataModel/ImageData";
 import vtkPlane from "vtk.js/Sources/Common/DataModel/Plane";
+import vtkVolume from "vtk.js/Sources/Rendering/Core/Volume";
+import vtkVolumeMapper from "vtk.js/Sources/Rendering/Core/VolumeMapper";
 
 export function buildVtkVolume(serie) {
   // TODO load and cache
@@ -230,3 +232,43 @@ export const getPlaneIntersection = (plane1, plane2, plane3) => {
   }
   return NaN;
 };
+
+export function createVolumeActor(contentData) {
+  const volumeActor = vtkVolume.newInstance();
+  const volumeMapper = vtkVolumeMapper.newInstance();
+  volumeMapper.setSampleDistance(1);
+  volumeActor.setMapper(volumeMapper);
+
+  volumeMapper.setInputData(contentData);
+
+  // FIXME: custom range mapping
+  const rgbTransferFunction = volumeActor
+    .getProperty()
+    .getRGBTransferFunction(0);
+  rgbTransferFunction.setMappingRange(500, 3000);
+
+  // update slice min/max values for interface
+  // Crate imageMapper for I,J,K planes
+  // const dataRange = data
+  //   .getPointData()
+  //   .getScalars()
+  //   .getRange();
+  // const extent = data.getExtent();
+  // this.window = {
+  //   min: 0,
+  //   max: dataRange[1] * 2,
+  //   value: dataRange[1]
+  // };
+  // this.level = {
+  //   min: -dataRange[1],
+  //   max: dataRange[1],
+  //   value: (dataRange[0] + dataRange[1]) / 2
+  // };
+  // this.updateColorLevel();
+  // this.updateColorWindow();
+
+  // TODO: find the volume center and set that as the slice intersection point.
+  // TODO: Refactor the MPR slice to set the focal point instead of defaulting to volume center
+
+  return volumeActor;
+}
