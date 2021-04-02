@@ -12,65 +12,9 @@
 import { MPRManager } from "./mprManager";
 import { buildVtkVolume, loadSerieWithLarvitar } from "./utils";
 
-// ======================================
-// Define viewports and global state ====
-// ======================================
-
-let global_data = {
-  sliceIntersection: [0, 0, 0],
-  syncWindowLevels: true,
-  volumes: [],
-  views: {
-    top: {
-      key: "top",
-      element: document.getElementById("viewer-2"),
-      color: "#F8B42C",
-      slicePlaneNormal: [0, 0, 1],
-      sliceViewUp: [0, -1, 0],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: "MIP",
-      window: {
-        width: 0,
-        center: 0
-      }
-    },
-    left: {
-      key: "left",
-      element: document.getElementById("viewer-3"),
-      color: "#A62CF8",
-      slicePlaneNormal: [1, 0, 0],
-      sliceViewUp: [0, 0, -1],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: "MIP",
-      window: {
-        width: 0,
-        center: 0
-      }
-    },
-    front: {
-      key: "front",
-      element: document.getElementById("viewer-4"),
-      color: "#2C92F8",
-      slicePlaneNormal: [0, -1, 0],
-      sliceViewUp: [0, 0, -1],
-      slicePlaneXRotation: 0,
-      slicePlaneYRotation: 0,
-      viewRotation: 0,
-      sliceThickness: 0.1,
-      blendMode: "MIP",
-      window: {
-        width: 0,
-        center: 0
-      }
-    }
-  }
-};
+// =====================
+// Define viewports ====
+// =====================
 
 const targetElements = {
   top: {
@@ -97,11 +41,16 @@ loadSerieWithLarvitar(serie => {
   // build vtk volume with larvitar
   const image = buildVtkVolume(serie);
   // run mpr
-  let mpr = new MPRManager(targetElements, global_data);
-  mpr.setImage(global_data, image);
-  mpr.setTool("crosshair", global_data);
+  let mpr = new MPRManager(targetElements);
+  // get initial state obj
+  let state = mpr.getInitialState();
+  console.log("state", state);
+  // set image
+  mpr.setImage(state, image);
+  // set active tool ("level" or "crosshair")
+  mpr.setTool("level", state);
   // add keyoboard events to interact with mpr
-  addEvents(mpr);
+  addEvents(mpr, state);
 });
 
 // =======================================
@@ -111,7 +60,7 @@ loadSerieWithLarvitar(serie => {
 // any other key reset views =============
 // =======================================
 
-function addEvents(mpr) {
+function addEvents(mpr, global_data) {
   let stateUI = {
     top: { angle: { x: 0, y: 0 }, dist: 0 },
     left: { angle: { x: 0, y: 0 }, dist: 0 },
@@ -119,7 +68,6 @@ function addEvents(mpr) {
   };
 
   document.addEventListener("keypress", e => {
-    console.log(e);
     let key, axis, action;
 
     switch (e.code) {
@@ -214,18 +162,14 @@ function addEvents(mpr) {
       mpr.onRotate("front", "y", 0, global_data);
       mpr.onThickness("front", "y", 0, global_data);
       stateUI.top.angle.x = 0;
-      stateUI.top.thickness.x = 0;
       stateUI.top.angle.y = 0;
-      stateUI.top.thickness.y = 0;
+      stateUI.top.dist = 0;
       stateUI.left.angle.x = 0;
-      stateUI.left.thickness.x = 0;
       stateUI.left.angle.y = 0;
-      stateUI.left.thickness.y = 0;
+      stateUI.left.dist = 0;
       stateUI.front.angle.x = 0;
-      stateUI.front.thickness.x = 0;
       stateUI.front.angle.y = 0;
-      stateUI.front.thickness.y = 0;
+      stateUI.front.dist = 0;
     }
-    console.log("resuting global_data", global_data);
   });
 }

@@ -26,8 +26,11 @@ import { degrees2radians } from "./utils";
  *  - setter for height and width
  */
 
+const PLANE_NORMALS = [[0, 0, 1], [1, 0, 0], [0, -1, 0]];
+
+const VIEW_UPS = [[0, -1, 0], [0, 0, -1], [0, 0, -1]];
 export class MPRView {
-  constructor(key, data, element) {
+  constructor(key, i, element) {
     this.VERBOSE = false;
     this.key = key;
     this.volumes = [];
@@ -39,12 +42,27 @@ export class MPRView {
     this.onDestroyed = null; // TODO check on original code
     this.element = element;
 
+    // init global data
+    this.slicePlaneNormal = PLANE_NORMALS[i];
+    this.sliceViewUp = VIEW_UPS[i];
+    this.slicePlaneXRotation = 0;
+    this.slicePlaneYRotation = 0;
+    this.viewRotation = 0;
+    this.sliceThickness = 0.1;
+    this.blendMode = "MIP";
+    this.window = {
+      width: 0,
+      center: 0
+    };
+
     // ex global_data
 
     // cache the view vectors so we can apply the rotations without modifying the original value
     // moved to constructor
-    this.cachedSlicePlane = [...data.views[key].slicePlaneNormal];
-    this.cachedSliceViewUp = [...data.views[key].sliceViewUp];
+    // this.cachedSlicePlane = [...data.views[key].slicePlaneNormal];
+    // this.cachedSliceViewUp = [...data.views[key].sliceViewUp];
+    this.cachedSlicePlane = [...this.slicePlaneNormal];
+    this.cachedSliceViewUp = [...this.sliceViewUp];
 
     this.genericRenderWindow = vtkGenericRenderWindow.newInstance({
       background: [0, 0, 0]

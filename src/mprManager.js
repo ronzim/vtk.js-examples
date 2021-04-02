@@ -29,7 +29,7 @@ import { MPRView } from "./mprView";
  *
  */
 export class MPRManager {
-  constructor(elements, global_data) {
+  constructor(elements) {
     this.VERBOSE = false; // TODO setter
     this.syncWindowLevels = true; // TODO setter
     this.activeTool = null; // TODO setter
@@ -44,28 +44,57 @@ export class MPRManager {
 
     this.mprViews = {};
 
-    this.initMPR(global_data);
+    this.initMPR();
   }
 
-  initMPR(global_data) {
-    Object.keys(this.elements).forEach(key => {
-      this.mprViews[key] = new MPRView(
-        key,
-        global_data,
-        this.elements[key].element
-      );
+  initMPR() {
+    Object.keys(this.elements).forEach((key, i) => {
+      this.mprViews[key] = new MPRView(key, i, this.elements[key].element);
     });
 
     if (this.VERBOSE) console.log("initialized", global_data);
   }
 
-  setImage(global_data, image) {
+  getInitialState() {
+    // cycle on keys, and reduce extracting only useful properties
+    // NOTE: initialize reduce with cloned object!
+    let viewsState = Object.keys(this.mprViews).reduce((result, key) => {
+      let {
+        slicePlaneNormal,
+        sliceViewUp,
+        slicePlaneXRotation,
+        slicePlaneYRotation,
+        viewRotation,
+        sliceThickness,
+        blendMode,
+        window
+      } = result[key];
+      result[key] = {
+        slicePlaneNormal,
+        sliceViewUp,
+        slicePlaneXRotation,
+        slicePlaneYRotation,
+        viewRotation,
+        sliceThickness,
+        blendMode,
+        window
+      };
+      return result;
+    }, Object.assign({}, this.mprViews));
+
+    return {
+      sliceIntersection: [...this.sliceIntersection], // clone
+      views: viewsState
+    };
+  }
+
+  setImage(data, image) {
     let actor = createVolumeActor(image);
     this.volumes.push(actor);
     this.sliceIntersection = getVolumeCenter(actor.getMapper());
 
     Object.keys(this.elements).forEach(key => {
-      this.mprViews[key].initView(actor, global_data);
+      this.mprViews[key].initView(actor, data);
     });
 
     if (this.activeTool) {
