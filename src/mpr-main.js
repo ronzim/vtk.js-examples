@@ -97,7 +97,9 @@ loadSerieWithLarvitar(serie => {
   // build vtk volume with larvitar
   const image = buildVtkVolume(serie);
   // run mpr
-  let mpr = new MPRManager(image, targetElements, global_data);
+  let mpr = new MPRManager(targetElements, global_data);
+  mpr.setImage(global_data, image);
+  mpr.setTool("crosshair", global_data);
   // add keyoboard events to interact with mpr
   addEvents(mpr);
 });

@@ -111,7 +111,7 @@ export class MPRView {
     // add the current volumes to the vtk renderer
     this.updateVolumesForRendering();
 
-    if (this.VERBOSE) console.log("view data", this.vkey, data.views[this.key]);
+    if (this.VERBOSE) console.log("view data", this.key, data.views[this.key]);
     this.updateSlicePlane(data.views[this.key]);
 
     // force the initial draw to set the canvas to the parent bounds.

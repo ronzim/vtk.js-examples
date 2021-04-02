@@ -29,7 +29,7 @@ import { MPRView } from "./mprView";
  *
  */
 export class MPRManager {
-  constructor(image, elements, global_data) {
+  constructor(elements, global_data) {
     this.VERBOSE = false; // TODO setter
     this.syncWindowLevels = true; // TODO setter
     this.activeTool = null; // TODO setter
@@ -44,31 +44,34 @@ export class MPRManager {
 
     this.mprViews = {};
 
-    this.initMPR(global_data, image);
+    this.initMPR(global_data);
   }
 
-  initMPR(global_data, image) {
-    let actor = createVolumeActor(image);
-    this.volumes.push(actor);
-    this.sliceIntersection = getVolumeCenter(actor.getMapper());
-
+  initMPR(global_data) {
     Object.keys(this.elements).forEach(key => {
       this.mprViews[key] = new MPRView(
         key,
         global_data,
         this.elements[key].element
       );
+    });
+
+    if (this.VERBOSE) console.log("initialized", global_data);
+  }
+
+  setImage(global_data, image) {
+    let actor = createVolumeActor(image);
+    this.volumes.push(actor);
+    this.sliceIntersection = getVolumeCenter(actor.getMapper());
+
+    Object.keys(this.elements).forEach(key => {
       this.mprViews[key].initView(actor, global_data);
     });
 
     if (this.activeTool) {
       this.setTool(this.activeTool);
     }
-
-    if (this.VERBOSE) console.log("initialized", global_data);
   }
-
-  setImage(global_data, image) {}
 
   setTool(toolName, global_data) {
     switch (toolName) {
@@ -107,8 +110,7 @@ export class MPRManager {
   }
 
   onCrosshairPointSelected({ srcKey, worldPos }) {
-    let components = this.viewsArray.map(v => v.key);
-    components.forEach(key => {
+    Object.keys(this.elements).forEach(key => {
       if (key !== srcKey) {
         // We are basically doing the same as getSlice but with the world coordinate
         // that we want to jump to instead of the camera focal point.
@@ -145,28 +147,28 @@ export class MPRManager {
   }
 
   // depends on global_data AND this.mprViews
-  // TODO refactoring DV: no need to have ww wc in global_data ?
   updateLevels({ windowCenter, windowWidth, srcKey }, global_data) {
     global_data.views[srcKey].window.center = windowCenter;
     global_data.views[srcKey].window.width = windowWidth;
 
     if (this.syncWindowLevels) {
-      this.elements.filter(el => el.key !== srcKey).forEach(el => {
-        global_data.views[el.key].window.center = windowCenter;
-        global_data.views[el.key].window.width = windowWidth;
-        this.mprViews[el.key].genericRenderWindow
-          .getInteractor()
-          .getInteractorStyle()
-          .setWindowLevel(windowWidth, windowCenter);
-        this.mprViews[el.key].genericRenderWindow.getRenderWindow().render();
-      });
+      Object.keys(this.elements)
+        .filter(key => key !== srcKey)
+        .forEach(k => {
+          global_data.views[k].window.center = windowCenter;
+          global_data.views[k].window.width = windowWidth;
+          this.mprViews[k].genericRenderWindow
+            .getInteractor()
+            .getInteractorStyle()
+            .setWindowLevel(windowWidth, windowCenter);
+          this.mprViews[k].genericRenderWindow.getRenderWindow().render();
+        });
     }
   }
 
   onScrolled() {
     let planes = [];
-    let components = this.viewsArray.map(v => v.key);
-    components.forEach(key => {
+    Object.keys(this.elements).forEach(key => {
       const camera = this.mprViews[key].genericRenderWindow
         .getRenderer()
         .getActiveCamera();
@@ -180,7 +182,7 @@ export class MPRManager {
     const newPoint = getPlaneIntersection(...planes);
     if (!Number.isNaN(newPoint)) {
       //   global_data.sliceIntersection = newPoint; TODO return sliceIntersection
-      if (VERBOSE) console.log("updating slice intersection", newPoint);
+      if (this.VERBOSE) console.log("updating slice intersection", newPoint);
     }
   }
 
@@ -208,12 +210,13 @@ export class MPRManager {
 
     // dv: this was a watcher in mpr component, update all except myself ?
 
-    let components = this.viewsArray.map(v => v.key);
-    components.filter(c => c !== key).forEach(k => {
-      this.mprViews[k].updateSlicePlane(global_data.views[k]);
-    });
+    Object.keys(this.elements)
+      .filter(c => c !== key)
+      .forEach(k => {
+        this.mprViews[k].updateSlicePlane(global_data.views[k]);
+      });
 
-    if (VERBOSE) console.log("afterOnRotate", global_data);
+    if (this.VERBOSE) console.log("afterOnRotate", global_data);
   }
 
   // depends on global_data and this.mprViews
