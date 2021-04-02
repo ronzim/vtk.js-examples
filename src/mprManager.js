@@ -28,51 +28,57 @@ import { MPRView } from "./mprView";
  *  - createVolumeActor
  *
  */
-
-const defaultTool = "level";
-const syncWindowLevels = true;
-const VERBOSE = false;
 export class MPRManager {
-  constructor(global_data, image) {
-    this.viewsArray = [
-      {
-        element: document.getElementById("viewer-2"),
-        key: "top"
-      },
-      {
-        element: document.getElementById("viewer-3"),
-        key: "left"
-      },
-      {
-        element: document.getElementById("viewer-4"),
-        key: "front"
-      }
-    ];
+  constructor(image, elements, global_data) {
+    this.VERBOSE = false; // TODO setter
+    this.syncWindowLevels = true; // TODO setter
+    this.activeTool = null; // TODO setter
 
-    this.mprViews = {
-      top: new MPRView("top"),
-      left: new MPRView("left"),
-      front: new MPRView("front")
-    };
+    // TODO input sanity check
+
+    this.elements = elements;
+
+    this.volumes = [];
+
+    this.sliceIntersection = [0, 0, 0];
+
+    this.mprViews = {};
 
     this.initMPR(global_data, image);
   }
 
   initMPR(global_data, image) {
     let actor = createVolumeActor(image);
-    global_data.volumes.push(actor);
-    global_data.sliceIntersection = getVolumeCenter(actor.getMapper());
+    this.volumes.push(actor);
+    this.sliceIntersection = getVolumeCenter(actor.getMapper());
 
-    Object.entries(global_data.views).forEach(([key, view]) => {
-      // initView(global_data, key, view.element);
-      this.mprViews[key].initView(global_data, key, view.element);
+    Object.keys(this.elements).forEach(key => {
+      this.mprViews[key] = new MPRView(
+        key,
+        global_data,
+        this.elements[key].element
+      );
+      this.mprViews[key].initView(actor, global_data);
     });
 
-    defaultTool == "level"
-      ? this.setLevelTool(global_data)
-      : this.setCrosshairTool(global_data);
+    if (this.activeTool) {
+      this.setTool(this.activeTool);
+    }
 
-    console.log("initialized", global_data);
+    if (this.VERBOSE) console.log("initialized", global_data);
+  }
+
+  setImage(global_data, image) {}
+
+  setTool(toolName, global_data) {
+    switch (toolName) {
+      case "level":
+        this.setLevelTool(global_data);
+        break;
+      case "crosshair":
+        this.setCrosshairTool(global_data);
+        break;
+    }
   }
 
   setLevelTool(global_data) {
@@ -144,19 +150,16 @@ export class MPRManager {
     global_data.views[srcKey].window.center = windowCenter;
     global_data.views[srcKey].window.width = windowWidth;
 
-    if (syncWindowLevels) {
-      let components = this.viewsArray.map(v => v.key);
-      Object.entries(components)
-        .filter(key => key !== srcKey)
-        .forEach(([i, key]) => {
-          global_data.views[key].window.center = windowCenter;
-          global_data.views[key].window.width = windowWidth;
-          this.mprViews[key].genericRenderWindow
-            .getInteractor()
-            .getInteractorStyle()
-            .setWindowLevel(windowWidth, windowCenter);
-          this.mprViews[key].genericRenderWindow.getRenderWindow().render();
-        });
+    if (this.syncWindowLevels) {
+      this.elements.filter(el => el.key !== srcKey).forEach(el => {
+        global_data.views[el.key].window.center = windowCenter;
+        global_data.views[el.key].window.width = windowWidth;
+        this.mprViews[el.key].genericRenderWindow
+          .getInteractor()
+          .getInteractorStyle()
+          .setWindowLevel(windowWidth, windowCenter);
+        this.mprViews[el.key].genericRenderWindow.getRenderWindow().render();
+      });
     }
   }
 

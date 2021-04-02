@@ -27,7 +27,7 @@ import { degrees2radians } from "./utils";
  */
 
 export class MPRView {
-  constructor(key) {
+  constructor(key, data, element) {
     this.VERBOSE = false;
     this.key = key;
     this.volumes = [];
@@ -35,18 +35,14 @@ export class MPRView {
     this.height = 300; // TODO set container.offsetHight
     this.renderer = null;
     this.parallel = false; // TODO setter
-    this.key = null; // "top", "front", "side"
     this.onCreated = null; // TODO
     this.onDestroyed = null; // TODO check on original code
-  }
-
-  initView(data, key, element) {
-    // dv: store volumes and element in viewport data
-    this.volumes = data.volumes;
     this.element = element;
 
+    // ex global_data
+
     // cache the view vectors so we can apply the rotations without modifying the original value
-    if (this.VERBOSE) console.log("spn", [...data.views[key].slicePlaneNormal]);
+    // moved to constructor
     this.cachedSlicePlane = [...data.views[key].slicePlaneNormal];
     this.cachedSliceViewUp = [...data.views[key].sliceViewUp];
 
@@ -74,11 +70,6 @@ export class MPRView {
     const oglrw = this.genericRenderWindow.getOpenGLRenderWindow();
     oglrw.buildPass(true);
 
-    const istyle = vtkInteractorStyleMPRSlice.newInstance();
-    istyle.setOnScroll(data.onStackScroll); // TODO check this
-    const inter = this.renderWindow.getInteractor();
-    inter.setInteractorStyle(istyle);
-
     /*
          // TODO: Use for maintaining clipping range for MIP
          const interactor = this.renderWindow.getInteractor();
@@ -88,6 +79,23 @@ export class MPRView {
            renderer.getActiveCamera().setClippingRange(...r);
          });
       */
+
+    // force the initial draw to set the canvas to the parent bounds.
+    this.onResize();
+
+    if (this.onCreated) {
+      this.onCreated();
+    }
+  }
+
+  initView(actor, data) {
+    // dv: store volumes and element in viewport data
+    this.volumes.push(actor);
+
+    const istyle = vtkInteractorStyleMPRSlice.newInstance();
+    istyle.setOnScroll(data.onStackScroll); // TODO check this
+    const inter = this.renderWindow.getInteractor();
+    inter.setInteractorStyle(istyle);
 
     //  TODO: assumes the volume is always set for this mounted state...Throw an error?
     if (this.VERBOSE) console.log(this.volumes);
@@ -101,13 +109,13 @@ export class MPRView {
     istyle.setSlice((range[0] + range[1]) / 2);
 
     // add the current volumes to the vtk renderer
-    this.updateVolumesForRendering(key);
+    this.updateVolumesForRendering();
 
-    if (this.VERBOSE) console.log(data.views[key]);
-    this.updateSlicePlane(data.views[key], key);
+    if (this.VERBOSE) console.log("view data", this.vkey, data.views[this.key]);
+    this.updateSlicePlane(data.views[this.key]);
 
     // force the initial draw to set the canvas to the parent bounds.
-    this.onResize(key);
+    this.onResize();
 
     if (this.onCreated) {
       this.onCreated();

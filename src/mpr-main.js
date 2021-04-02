@@ -72,6 +72,23 @@ let global_data = {
   }
 };
 
+const targetElements = {
+  top: {
+    element: document.getElementById("viewer-2"),
+    key: "top",
+    height: 0, // ?
+    width: 0 // ?
+  },
+  left: {
+    element: document.getElementById("viewer-3"),
+    key: "left"
+  },
+  front: {
+    element: document.getElementById("viewer-4"),
+    key: "front"
+  }
+};
+
 // ================================
 //        *** START ALL ***
 // ================================
@@ -80,7 +97,7 @@ loadSerieWithLarvitar(serie => {
   // build vtk volume with larvitar
   const image = buildVtkVolume(serie);
   // run mpr
-  let mpr = new MPRManager(global_data, image);
+  let mpr = new MPRManager(image, targetElements, global_data);
   // add keyoboard events to interact with mpr
   addEvents(mpr);
 });
