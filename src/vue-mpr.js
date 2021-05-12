@@ -274,7 +274,7 @@ loadSerieWithLarvitar(serie => {
     init(global_data, view.key, view.element);
   }
 
-  // initWidget(image, "top");
+  initWidget(image, "top");
 });
 
 // =====================
